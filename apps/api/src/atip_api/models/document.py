@@ -9,6 +9,7 @@ from atip_api.db import Base
 from atip_api.models.enums import DocumentStatus
 
 if TYPE_CHECKING:
+    from atip_api.models.chunk import Chunk
     from atip_api.models.processing_job import ProcessingJob
     from atip_api.models.workspace import Workspace
 
@@ -31,5 +32,8 @@ class Document(Base):
 
     workspace: Mapped["Workspace"] = relationship(back_populates="documents")
     jobs: Mapped[list["ProcessingJob"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    chunks: Mapped[list["Chunk"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
