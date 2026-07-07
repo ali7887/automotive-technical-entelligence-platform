@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # OpenAI-compatible endpoint; embeddings are skipped (with a warning) if no key is set
     openai_api_key: str | None = None
     openai_base_url: str | None = None
+    # chat model for verified RAG; generation is disabled entirely without an API key
+    llm_model: str = "gpt-4o-mini"
     rrf_k: int = 60
     storage_dir: Path = Path("storage/uploads")
     max_upload_mb: int = 50
