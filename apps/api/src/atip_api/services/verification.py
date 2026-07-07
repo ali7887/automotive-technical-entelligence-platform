@@ -191,8 +191,12 @@ def verify_answer(parsed: ParsedOutput, sources: list[RetrievedSource]) -> Verif
                 continue
             if quote_supported(citation.quote, source.text):
                 claim_validated = True
-                snippet = _WS_RE.sub(" ", citation.quote).strip()
-                best[source.index] = VerifiedCitation(source.index, source, "validated", snippet)
+                # first validated quote wins; later claims must not displace it
+                if source.index not in best or best[source.index].status != "validated":
+                    snippet = _WS_RE.sub(" ", citation.quote).strip()
+                    best[source.index] = VerifiedCitation(
+                        source.index, source, "validated", snippet
+                    )
             else:
                 any_weak = True
                 warnings.append(

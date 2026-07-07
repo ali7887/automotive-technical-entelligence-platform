@@ -109,6 +109,21 @@ def test_verified_when_quote_matches_exactly():
     assert citation.snippet == quote
 
 
+def test_first_validated_quote_wins_per_source():
+    first = "The luminous intensity shall not exceed 125 candela at test point H-V."
+    second = "photometric requirements of Table XIX"
+    parsed = parse_llm_output(
+        _raw(
+            "125 candela [1]. Table XIX applies [1].",
+            _claims([{"source": 1, "quote": first}], [{"source": 1, "quote": second}]),
+        )
+    )
+    verified = verify_answer(parsed, [_source()])
+    assert verified.status == "verified"
+    assert len(verified.citations) == 1
+    assert verified.citations[0].snippet == first
+
+
 def test_quote_matching_ignores_whitespace_and_case():
     quote = "the LUMINOUS   intensity\nshall not exceed 125 candela"
     parsed = parse_llm_output(_raw("125 candela [1]", _claims([{"source": 1, "quote": quote}])))
