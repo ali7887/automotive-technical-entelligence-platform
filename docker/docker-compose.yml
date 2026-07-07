@@ -9,7 +9,8 @@ services:
       POSTGRES_PASSWORD: atip
       POSTGRES_DB: atip
     ports:
-      - "5432:5432"
+      # non-default host ports: 5432/6379/6333 are taken by other local services
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +23,7 @@ services:
     image: redis:7-alpine
     container_name: atip-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -32,11 +33,11 @@ services:
       retries: 10
 
   qdrant:
-    image: qdrant/qdrant:v1.14.1
+    image: qdrant/qdrant:v1.18.2
     container_name: atip-qdrant
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "6335:6333"
+      - "6336:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
