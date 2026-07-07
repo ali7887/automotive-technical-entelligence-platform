@@ -6,6 +6,8 @@ from pathlib import Path
 os.environ["DATABASE_URL"] = "postgresql+asyncpg://atip:atip@127.0.0.1:5433/atip_test"
 os.environ["STORAGE_DIR"] = str(Path(tempfile.mkdtemp(prefix="atip-test-")) / "uploads")
 os.environ["MAX_UPLOAD_MB"] = "1"
+# Tests must never call a real embeddings API; fakes are injected via monkeypatch.
+os.environ["OPENAI_API_KEY"] = ""
 
 import asyncpg
 import pytest
