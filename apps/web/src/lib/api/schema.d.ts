@@ -113,6 +113,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{workspace_id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search Workspace
+         * @description Hybrid retrieval: Postgres FTS + Qdrant semantic search fused with RRF.
+         */
+        post: operations["search_workspace_api_workspaces__workspace_id__search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -200,6 +220,87 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "PENDING" | "PROCESSING" | "READY" | "FAILED";
+        /** SearchRequest */
+        SearchRequest: {
+            /** Query */
+            query: string;
+            /** Document Id */
+            document_id?: string | null;
+            /**
+             * Top K
+             * @default 10
+             */
+            top_k: number;
+        };
+        /** SearchResponse */
+        SearchResponse: {
+            /** Query */
+            query: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Document Id */
+            document_id: string | null;
+            /** Top K */
+            top_k: number;
+            /** Semantic Used */
+            semantic_used: boolean;
+            /** Results */
+            results: components["schemas"]["SearchResult"][];
+        };
+        /** SearchResult */
+        SearchResult: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Version Id */
+            version_id?: string | null;
+            /** Document Name */
+            document_name: string;
+            /** Chunk Index */
+            chunk_index: number;
+            /** Page Start */
+            page_start: number;
+            /** Page End */
+            page_end: number;
+            /** Clause Id */
+            clause_id: string | null;
+            /** Heading */
+            heading: string | null;
+            /** Text */
+            text: string;
+            scores: components["schemas"]["SearchScores"];
+        };
+        /**
+         * SearchScores
+         * @description Rank/score breakdown per retrieval leg plus the fused RRF score.
+         */
+        SearchScores: {
+            /** Rrf */
+            rrf: number;
+            /** Keyword Rank */
+            keyword_rank?: number | null;
+            /** Keyword Score */
+            keyword_score?: number | null;
+            /** Semantic Rank */
+            semantic_rank?: number | null;
+            /** Semantic Score */
+            semantic_score?: number | null;
+        };
         /** ServiceStatus */
         ServiceStatus: {
             /**
@@ -549,6 +650,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_workspace_api_workspaces__workspace_id__search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResponse"];
                 };
             };
             /** @description Validation Error */

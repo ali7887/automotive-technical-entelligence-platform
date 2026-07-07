@@ -7,6 +7,8 @@ export type DocumentUploadResponse = components["schemas"]["DocumentUploadRespon
 export type HealthResponse = components["schemas"]["HealthResponse"];
 export type DocumentStatus = components["schemas"]["DocumentStatus"];
 export type JobStatus = components["schemas"]["JobStatus"];
+export type SearchResponse = components["schemas"]["SearchResponse"];
+export type SearchResult = components["schemas"]["SearchResult"];
 
 export interface ApiError {
   code: string;

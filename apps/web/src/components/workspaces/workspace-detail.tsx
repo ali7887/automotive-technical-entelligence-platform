@@ -7,6 +7,7 @@ import Link from "next/link";
 import { DocumentsTable } from "@/components/documents/documents-table";
 import { JobWatchers } from "@/components/documents/job-watcher";
 import { UploadButton } from "@/components/documents/upload-button";
+import { SearchPanel } from "@/components/search/search-panel";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api/client";
@@ -53,6 +54,7 @@ export function WorkspaceDetail({ workspaceId }: { workspaceId: string }) {
         <UploadButton workspaceId={workspaceId} />
       </div>
       <DocumentsTable workspaceId={workspaceId} />
+      <SearchPanel workspaceId={workspaceId} />
       <JobWatchers workspaceId={workspaceId} />
     </div>
   );
