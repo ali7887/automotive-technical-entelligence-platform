@@ -12,6 +12,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "fastapi>=0.139.0",
     "fastapi-cli>=0.0.28",
+    "openai>=2.6.0",
     "pydantic-settings>=2.14.2",
     "pypdf>=6.14.2",
     "python-multipart>=0.0.32",

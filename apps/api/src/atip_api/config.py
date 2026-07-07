@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://127.0.0.1:6335"
     qdrant_collection: str = "atip_chunks"
     embedding_dim: int = 1536
+    embedding_model: str = "text-embedding-3-small"
+    # OpenAI-compatible endpoint; embeddings are skipped (with a warning) if no key is set
+    openai_api_key: str | None = None
+    openai_base_url: str | None = None
+    rrf_k: int = 60
     storage_dir: Path = Path("storage/uploads")
     max_upload_mb: int = 50
     cors_origins: str = "http://localhost:3000"
