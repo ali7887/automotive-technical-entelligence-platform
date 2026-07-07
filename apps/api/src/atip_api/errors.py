@@ -28,6 +28,16 @@ class FileTooLargeError(AppError):
     code = "file_too_large"
 
 
+class GenerationDisabledError(AppError):
+    status_code = 503
+    code = "generation_disabled"
+
+
+class GenerationFailedError(AppError):
+    status_code = 502
+    code = "generation_failed"
+
+
 async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, AppError)
     return JSONResponse(
