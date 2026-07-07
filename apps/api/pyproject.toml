@@ -1,0 +1,54 @@
+[project]
+name = "atip-api"
+version = "0.1.0"
+description = "ATIP API — FastAPI backend for the Automotive Technical Intelligence Platform"
+readme = "README.md"
+authors = [
+    { name = "ali7887", email = "alikiani78@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.18.5",
+    "asyncpg>=0.31.0",
+    "fastapi>=0.139.0",
+    "fastapi-cli>=0.0.28",
+    "pydantic-settings>=2.14.2",
+    "pypdf>=6.14.2",
+    "python-multipart>=0.0.32",
+    "qdrant-client>=1.18.0",
+    "redis>=8.0.1",
+    "sqlalchemy[asyncio]>=2.0.51",
+    "uvicorn[standard]>=0.50.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pyright>=1.1.411",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.15.20",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+
+[tool.pyright]
+include = ["src", "tests"]
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
