@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
+import { ChatPanel } from "@/components/chat/chat-panel";
 import { DocumentsTable } from "@/components/documents/documents-table";
 import { JobWatchers } from "@/components/documents/job-watcher";
 import { UploadButton } from "@/components/documents/upload-button";
@@ -54,6 +55,7 @@ export function WorkspaceDetail({ workspaceId }: { workspaceId: string }) {
         <UploadButton workspaceId={workspaceId} />
       </div>
       <DocumentsTable workspaceId={workspaceId} />
+      <ChatPanel workspaceId={workspaceId} />
       <SearchPanel workspaceId={workspaceId} />
       <JobWatchers workspaceId={workspaceId} />
     </div>
