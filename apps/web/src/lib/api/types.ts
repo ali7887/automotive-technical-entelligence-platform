@@ -9,6 +9,9 @@ export type DocumentStatus = components["schemas"]["DocumentStatus"];
 export type JobStatus = components["schemas"]["JobStatus"];
 export type SearchResponse = components["schemas"]["SearchResponse"];
 export type SearchResult = components["schemas"]["SearchResult"];
+export type AskResponse = components["schemas"]["AskResponse"];
+export type Citation = components["schemas"]["Citation"];
+export type RetrievedSource = components["schemas"]["RetrievedSourceRead"];
 
 export interface ApiError {
   code: string;

@@ -133,14 +133,145 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{workspace_id}/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Workspace
+         * @description Verified RAG: hybrid retrieval + LLM answer checked against the retrieved chunks.
+         */
+        post: operations["ask_workspace_api_workspaces__workspace_id__ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Chat Workspace
+         * @description Verified RAG over SSE: `sources`, then `token`*, then `final` — or `error`.
+         *
+         *     Streamed tokens are the unverified draft; the `final` event carries the
+         *     verified answer and citations and must replace the streamed text.
+         */
+        get: operations["chat_workspace_api_workspaces__workspace_id__chat_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnswerVerification */
+        AnswerVerification: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "verified" | "partial" | "unsupported" | "not_found";
+            /** Claims Total */
+            claims_total: number;
+            /** Claims Validated */
+            claims_validated: number;
+            /** Citations Dropped */
+            citations_dropped: number;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** AskRequest */
+        AskRequest: {
+            /** Question */
+            question: string;
+            /** Document Id */
+            document_id?: string | null;
+            /**
+             * Top K
+             * @default 8
+             */
+            top_k: number;
+        };
+        /** AskResponse */
+        AskResponse: {
+            /** Question */
+            question: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Document Id */
+            document_id: string | null;
+            /** Answer Md */
+            answer_md: string;
+            /** Not Found */
+            not_found: boolean;
+            /** Confidence */
+            confidence: number | null;
+            /** Citations */
+            citations: components["schemas"]["Citation"][];
+            verification: components["schemas"]["AnswerVerification"];
+            /** Sources */
+            sources: components["schemas"]["RetrievedSourceRead"][];
+            /** Semantic Used */
+            semantic_used: boolean;
+            /** Model */
+            model: string;
+        };
         /** Body_upload_document_api_workspaces__workspace_id__documents_post */
         Body_upload_document_api_workspaces__workspace_id__documents_post: {
             /** File */
             file: string;
+        };
+        /**
+         * Citation
+         * @description A verified citation; `citation_id` matches inline [n] markers in the answer.
+         */
+        Citation: {
+            /** Citation Id */
+            citation_id: number;
+            /**
+             * Postgres Chunk Id
+             * Format: uuid
+             */
+            postgres_chunk_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Name */
+            document_name: string;
+            /** Clause Id */
+            clause_id: string | null;
+            /** Page Start */
+            page_start: number;
+            /** Page End */
+            page_end: number;
+            /** Source Text Snippet */
+            source_text_snippet: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "validated" | "weak";
         };
         /** DocumentRead */
         DocumentRead: {
@@ -220,6 +351,32 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "PENDING" | "PROCESSING" | "READY" | "FAILED";
+        /**
+         * RetrievedSourceRead
+         * @description A retrieved chunk as numbered in the prompt; streamed before generation.
+         */
+        RetrievedSourceRead: {
+            /** Index */
+            index: number;
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Name */
+            document_name: string;
+            /** Clause Id */
+            clause_id: string | null;
+            /** Page Start */
+            page_start: number;
+            /** Page End */
+            page_end: number;
+        };
         /** SearchRequest */
         SearchRequest: {
             /** Query */
@@ -685,6 +842,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_workspace_api_workspaces__workspace_id__ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chat_workspace_api_workspaces__workspace_id__chat_get: {
+        parameters: {
+            query: {
+                question: string;
+                document_id?: string | null;
+                top_k?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
