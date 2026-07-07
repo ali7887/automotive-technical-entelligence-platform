@@ -1,0 +1,34 @@
+# dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# builds
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# env & local config
+.env
+.env.local
+.env.*.local
+
+# tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.turbo/
+coverage/
+htmlcov/
+
+# uploads / local storage (dev)
+storage/
+data/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
