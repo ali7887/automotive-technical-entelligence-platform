@@ -1,6 +1,6 @@
 # Roadmap & Acceptance Criteria
 
-## Phase 1 — Foundation (Active)
+## Phase 1 — Foundation (Done — see PHASE_1_HANDOFF.md)
 - monorepo setup (pnpm + uv)
 - docker compose: postgres(+pgvector) + redis + qdrant
 - schema + alembic migrations (Workspace, Document, ProcessingJob)
@@ -13,7 +13,7 @@ Acceptance:
 - upload a real regulation → status "ready"
 - web can call api health-check end-to-end (CORS/env verified)
 
-## Phase 2 — Retrieval (Qdrant + Hybrid Search)
+## Phase 2 — Retrieval (Qdrant + Hybrid Search) (Done — see PHASE_2_HANDOFF.md)
 - embeddings + qdrant integration
 - postgres FTS keyword search
 - hybrid retrieval (RRF)
