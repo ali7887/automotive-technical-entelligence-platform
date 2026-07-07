@@ -10,6 +10,7 @@ from atip_api.db import get_engine
 from atip_api.errors import AppError, app_error_handler
 from atip_api.routers.documents import router as documents_router
 from atip_api.routers.health import router as health_router
+from atip_api.routers.search import router as search_router
 from atip_api.routers.workspaces import router as workspaces_router
 from atip_api.vectorstore import ensure_qdrant_collection
 
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(workspaces_router)
     app.include_router(documents_router)
+    app.include_router(search_router)
     return app
 
 
