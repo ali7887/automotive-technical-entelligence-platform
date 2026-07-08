@@ -8,6 +8,7 @@ import { ChatPanel } from "@/components/chat/chat-panel";
 import { DocumentsTable } from "@/components/documents/documents-table";
 import { JobWatchers } from "@/components/documents/job-watcher";
 import { UploadButton } from "@/components/documents/upload-button";
+import { EvidenceMapPanel } from "@/components/evidence/evidence-map-panel";
 import { EvidenceViewerPanel } from "@/components/pdf/evidence-viewer-panel";
 import { SearchPanel } from "@/components/search/search-panel";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ export function WorkspaceDetail({ workspaceId }: { workspaceId: string }) {
       </div>
       <DocumentsTable workspaceId={workspaceId} />
       <ChatPanel workspaceId={workspaceId} />
+      <EvidenceMapPanel workspaceId={workspaceId} />
       <SearchPanel workspaceId={workspaceId} />
       <JobWatchers workspaceId={workspaceId} />
       <EvidenceViewerPanel />

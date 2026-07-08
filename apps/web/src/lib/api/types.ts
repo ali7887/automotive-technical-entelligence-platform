@@ -12,6 +12,12 @@ export type SearchResult = components["schemas"]["SearchResult"];
 export type AskResponse = components["schemas"]["AskResponse"];
 export type Citation = components["schemas"]["Citation"];
 export type RetrievedSource = components["schemas"]["RetrievedSourceRead"];
+export type EvidenceItem = components["schemas"]["EvidenceItemRead"];
+export type EvidenceCitation = components["schemas"]["EvidenceCitationRead"];
+export type EvidenceStatus = components["schemas"]["EvidenceStatus"];
+export type EvidenceRisk = components["schemas"]["EvidenceRisk"];
+export type EvidenceExtractResponse = components["schemas"]["EvidenceExtractResponse"];
+export type EvidenceMapExport = components["schemas"]["EvidenceMapExport"];
 
 export interface ApiError {
   code: string;

@@ -96,6 +96,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document File */
+        get: operations["get_document_file_api_documents__document_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -168,6 +185,94 @@ export interface paths {
          *     verified answer and citations and must replace the streamed text.
          */
         get: operations["chat_workspace_api_workspaces__workspace_id__chat_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/evidence/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract Evidence
+         * @description Extract verified requirements; replaces the document's existing evidence.
+         */
+        post: operations["extract_evidence_api_documents__document_id__evidence_extract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Evidence */
+        get: operations["list_evidence_api_workspaces__workspace_id__evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evidence/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Evidence Item */
+        patch: operations["update_evidence_item_api_evidence__item_id__patch"];
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/evidence/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Evidence Json */
+        get: operations["export_evidence_json_api_workspaces__workspace_id__evidence_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/evidence/export.md": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Evidence Markdown */
+        get: operations["export_evidence_markdown_api_workspaces__workspace_id__evidence_export_md_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -308,6 +413,123 @@ export interface components {
             document: components["schemas"]["DocumentRead"];
             job: components["schemas"]["JobRead"];
         };
+        /** EvidenceCitationRead */
+        EvidenceCitationRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /** Clause Id */
+            clause_id: string | null;
+            /** Page Start */
+            page_start: number;
+            /** Page End */
+            page_end: number;
+            /** Quote */
+            quote: string;
+        };
+        /** EvidenceExtractResponse */
+        EvidenceExtractResponse: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Items */
+            items: components["schemas"]["EvidenceItemRead"][];
+            /** Requirements Seen */
+            requirements_seen: number;
+            /** Requirements Dropped */
+            requirements_dropped: number;
+            /** Citations Dropped */
+            citations_dropped: number;
+            /** Warnings */
+            warnings: string[];
+            /** Model */
+            model: string;
+        };
+        /** EvidenceItemRead */
+        EvidenceItemRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Name */
+            document_name: string;
+            /** Requirement Text */
+            requirement_text: string;
+            status: components["schemas"]["EvidenceStatus"];
+            risk: components["schemas"]["EvidenceRisk"];
+            /** Citations */
+            citations: components["schemas"]["EvidenceCitationRead"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * EvidenceItemUpdate
+         * @description Reviewer-owned fields; at least one must be provided.
+         */
+        EvidenceItemUpdate: {
+            status?: components["schemas"]["EvidenceStatus"] | null;
+            risk?: components["schemas"]["EvidenceRisk"] | null;
+        };
+        /**
+         * EvidenceMapExport
+         * @description JSON Evidence Map export; the Markdown export renders the same items.
+         */
+        EvidenceMapExport: {
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Workspace Name */
+            workspace_name: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Items */
+            items: components["schemas"]["EvidenceItemRead"][];
+        };
+        /**
+         * EvidenceRisk
+         * @description Reviewer-owned risk rating of an extracted requirement.
+         * @enum {string}
+         */
+        EvidenceRisk: "UNRATED" | "LOW" | "MEDIUM" | "HIGH";
+        /**
+         * EvidenceStatus
+         * @description Reviewer-owned compliance status of an extracted requirement.
+         * @enum {string}
+         */
+        EvidenceStatus: "OPEN" | "IN_REVIEW" | "COMPLIANT" | "NON_COMPLIANT" | "NOT_APPLICABLE";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -789,6 +1011,37 @@ export interface operations {
             };
         };
     };
+    get_document_file_api_documents__document_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_job_api_jobs__job_id__get: {
         parameters: {
             query?: never;
@@ -912,6 +1165,168 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extract_evidence_api_documents__document_id__evidence_extract_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceExtractResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_evidence_api_workspaces__workspace_id__evidence_get: {
+        parameters: {
+            query?: {
+                document_id?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceItemRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_evidence_item_api_evidence__item_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceItemRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_evidence_json_api_workspaces__workspace_id__evidence_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceMapExport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_evidence_markdown_api_workspaces__workspace_id__evidence_export_md_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                    "text/markdown": unknown;
                 };
             };
             /** @description Validation Error */
