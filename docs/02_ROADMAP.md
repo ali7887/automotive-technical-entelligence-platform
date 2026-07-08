@@ -28,3 +28,18 @@ Acceptance:
 - zero fabricated citations: every citation is quote-verified against real chunks
 - citation clicks highlight the source (document, clause, page, quote);
   in-PDF region highlighting is deferred to the PDF viewer work (see handoff)
+
+## Phase 4 — Evidence Map & PDF Traceability (Done — see PHASE_4_HANDOFF.md)
+- PDF traceability: file-serving endpoint + in-app react-pdf viewer; inline [n]
+  citations and evidence cards open the viewer at the cited page with the
+  verified quote highlighted via text-layer matching (chunks carry no
+  coordinates; nothing is invented)
+- Supporting Evidence panel on answers with "Verify on document" buttons
+- verified requirement extraction per document (LLM + Phase 3 quote
+  verification; only requirements with validated citations persist)
+- Evidence Map UI table with editable status/risk; export as JSON + Markdown
+Acceptance:
+- clicking a citation opens the source PDF at the right page and highlights
+  the quoted text
+- extracted evidence items map to real chunks; fabricated quotes are dropped
+  and surfaced as warnings (verified live with a stub LLM)

@@ -1,7 +1,7 @@
 # Phase 4 Handoff — Evidence Map & PDF Traceability
 
-> Status: **IN PROGRESS** (initialized 2026-07-08). This file is the session memory for
-> Phase 4. Update the "Progress" section as work lands; finalize on phase completion.
+> Status: **DONE** (completed 2026-07-08). Verified end-to-end (94 API tests, live API
+> against a stub LLM, web build + page smoke test).
 
 ## What was achieved before Phase 4
 
@@ -91,5 +91,66 @@ User decision (2026-07-08): **both tracks in one phase**, Track A first.
   persistence + Alembic migration; export as JSON + Markdown; UI table with editable
   status and risk; deterministic tests for extraction + citation validation.
 
+## Delivered
+
+### Track A — PDF Traceability
+- `GET /api/documents/{id}/file` (routers/documents.py): streams the stored PDF
+  inline; 404 when the document or its file is missing.
+- `components/pdf/pdf-viewer.tsx`: react-pdf viewer (client-only via `next/dynamic`,
+  `ssr: false` — pdf.js needs browser APIs). Worker configured via
+  `new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url)`; **`pdfjs-dist` must
+  stay a direct dependency** (pnpm strict node_modules) or the Turbopack build breaks.
+- Quote highlighting: `customTextRenderer` marks text-layer fragments matching the
+  verified quote using the same whitespace/case normalization as the verification
+  layer, with edge-overlap handling for quotes spanning line fragments; graceful
+  fallback is plain page-level navigation.
+- `components/pdf/evidence-viewer-panel.tsx`: slide-over dialog (Esc/backdrop close,
+  open-original-in-new-tab); opened via the `useEvidenceViewer` zustand store.
+- Chat panel: inline `[n]` markers and evidence cards open the viewer at the cited
+  page; citation list renamed "Supporting evidence" with per-citation
+  "Verify on document" buttons.
+
+### Track B — Evidence Map
+- Models (`models/evidence.py`) + migration `9d4e1f6a2c53`: `evidence_items`
+  (reviewer-owned `status`/`risk` enums) and `evidence_citations` (chunk provenance
+  snapshot: chunk_id, clause_id, pages, verified quote). `chunk_id` deliberately has
+  **no FK to chunks**: re-processing a document must not silently delete evidence.
+- Extraction (`services/evidence.py`, `services/evidence_prompts.py`): batches of 12
+  chunks per LLM call in chunk_index order; model must output strict JSON
+  `{"requirements": [{"text", "citations": [{"source", "quote"}]}]}`; every quote is
+  verified via the Phase 3 `quote_supported` rules. Only requirements with ≥1
+  validated citation persist; fabricated/unverifiable quotes and nonexistent source
+  indices are dropped, counted, and returned as warnings. Cross-batch dedupe by
+  normalized requirement text. **Re-extraction replaces the document's items,
+  including reviewer status/risk** (surfaced in the UI).
+- Endpoints (`routers/evidence.py`): `POST /api/documents/{id}/evidence/extract`
+  (503 without key, 404 missing, 409 non-READY), `GET /api/workspaces/{id}/evidence`
+  (`document_id` filter), `PATCH /api/evidence/{item_id}` (status/risk),
+  `GET .../evidence/export` (JSON) and `.../evidence/export.md` (Markdown attachment).
+- Web (`components/evidence/evidence-map-panel.tsx`): per-document extraction with
+  replace warning, requirements table with editable status/risk selects, citation
+  chips that open the PDF viewer at the evidence, JSON/Markdown export downloads,
+  loading/empty/error states.
+- Extraction is synchronous; fine for MVP-sized documents, a background job would be
+  needed for very large regulations (noted, not built — keep out of scope creep).
+
+## Verification (2026-07-08)
+- `uv run pytest`: 94 passed (29 new: extraction parsing/citation-validation unit
+  tests incl. fabricated quotes, fake source indices, too-short quotes, dedupe;
+  endpoint tests with deterministic fake LLMs incl. malformed output, re-extract
+  replacement, 503/404/409/422 paths, exports).
+- `ruff` + `pyright` clean; `pnpm lint` + `pnpm typecheck` + `pnpm build` clean.
+- Migration applied against dev Postgres (`alembic upgrade head` → `9d4e1f6a2c53`).
+- Live E2E with an OpenAI-compatible stub (scratchpad, port 8089): upload → READY →
+  file endpoint streams `%PDF` inline → extraction persisted the verified requirement
+  (clause `S5.1.2`, p. 1) and dropped the fabricated one with warnings → PATCH
+  status/risk → Markdown export rendered correctly → Phase 3 `/ask` regression still
+  `verified`. Web dev server renders the workspace page with the Evidence Map panel.
+
 ## Progress
 - 2026-07-08: handoff initialized; repo state audited; plan proposed.
+- 2026-07-08: Track A + Track B implemented, tested, live-verified; phase complete.
+
+## Next phase
+Phase 5 — Version Diff (`version_id` is still `null` everywhere; chunk UUIDv5 IDs and
+content-hash idempotency were designed with versioning in mind).
