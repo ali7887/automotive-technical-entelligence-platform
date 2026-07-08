@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CircleAlert, Loader2, SendHorizontal, ShieldCheck } from "lucide-react";
+import { CircleAlert, FileSearch, Loader2, SendHorizontal, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,19 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api/client";
 import { openChatStream } from "@/lib/api/stream";
 import type { AskResponse, Citation, RetrievedSource } from "@/lib/api/types";
+import { useEvidenceViewer } from "@/lib/store";
 import { cn } from "@/lib/utils";
+
+/** Open a citation in the PDF evidence viewer at its cited page and quote. */
+function citationTarget(citation: Citation) {
+  return {
+    documentId: citation.document_id,
+    documentName: citation.document_name,
+    page: citation.page_start,
+    quote: citation.source_text_snippet,
+    clauseId: citation.clause_id,
+  };
+}
 
 interface Exchange {
   id: number;
@@ -201,6 +213,7 @@ const STATUS_LABELS: Record<AskResponse["verification"]["status"], string> = {
 
 function VerifiedAnswer({ result }: { result: AskResponse }) {
   const [activeCitation, setActiveCitation] = useState<number | null>(null);
+  const openEvidence = useEvidenceViewer((state) => state.openEvidence);
   const ok = result.verification.status === "verified";
 
   return (
@@ -225,7 +238,8 @@ function VerifiedAnswer({ result }: { result: AskResponse }) {
           text={result.answer_md}
           citations={result.citations}
           activeCitation={activeCitation}
-          onCitation={setActiveCitation}
+          onHover={setActiveCitation}
+          onOpen={(citation) => openEvidence(citationTarget(citation))}
         />
       </p>
 
@@ -243,7 +257,7 @@ function VerifiedAnswer({ result }: { result: AskResponse }) {
       {result.citations.length > 0 && (
         <div className="space-y-2 border-t pt-3">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Sources
+            Supporting evidence
           </p>
           <ul className="space-y-2">
             {result.citations.map((citation) => (
@@ -252,6 +266,7 @@ function VerifiedAnswer({ result }: { result: AskResponse }) {
                 citation={citation}
                 active={activeCitation === citation.citation_id}
                 onHover={setActiveCitation}
+                onOpen={() => openEvidence(citationTarget(citation))}
               />
             ))}
           </ul>
@@ -268,31 +283,35 @@ function AnswerText({
   text,
   citations,
   activeCitation,
-  onCitation,
+  onHover,
+  onOpen,
 }: {
   text: string;
   citations: Citation[];
   activeCitation: number | null;
-  onCitation: (id: number | null) => void;
+  onHover: (id: number | null) => void;
+  onOpen: (citation: Citation) => void;
 }) {
   return text.split(MARKER_SPLIT).map((part, index) => {
     const match = MARKER.exec(part);
     const citationId = match ? Number(match[1]) : null;
-    if (citationId != null && citations.some((c) => c.citation_id === citationId)) {
+    const citation =
+      citationId != null ? citations.find((c) => c.citation_id === citationId) : undefined;
+    if (citation) {
       return (
         <button
           key={index}
           type="button"
-          onClick={() => onCitation(citationId)}
-          onMouseEnter={() => onCitation(citationId)}
-          onMouseLeave={() => onCitation(null)}
+          onClick={() => onOpen(citation)}
+          onMouseEnter={() => onHover(citation.citation_id)}
+          onMouseLeave={() => onHover(null)}
           className={cn(
             "mx-0.5 inline-flex -translate-y-px items-center rounded border px-1 text-[11px] font-medium tabular-nums transition-colors",
             activeCitation === citationId
               ? "border-primary bg-primary text-primary-foreground"
               : "bg-muted text-muted-foreground hover:border-primary hover:text-foreground",
           )}
-          aria-label={`Show source ${citationId}`}
+          aria-label={`Show evidence ${citationId} on the document`}
         >
           {citationId}
         </button>
@@ -306,10 +325,12 @@ function CitationCard({
   citation,
   active,
   onHover,
+  onOpen,
 }: {
   citation: Citation;
   active: boolean;
   onHover: (id: number | null) => void;
+  onOpen: () => void;
 }) {
   const ref = useRef<HTMLLIElement>(null);
   useEffect(() => {
@@ -347,6 +368,10 @@ function CitationCard({
       <blockquote className="mt-2 border-l-2 pl-3 text-sm text-muted-foreground">
         {citation.source_text_snippet}
       </blockquote>
+      <Button variant="outline" size="sm" className="mt-2" onClick={onOpen}>
+        <FileSearch className="size-3.5" />
+        Verify on document
+      </Button>
     </li>
   );
 }

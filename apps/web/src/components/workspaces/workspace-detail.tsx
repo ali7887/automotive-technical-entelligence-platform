@@ -8,6 +8,7 @@ import { ChatPanel } from "@/components/chat/chat-panel";
 import { DocumentsTable } from "@/components/documents/documents-table";
 import { JobWatchers } from "@/components/documents/job-watcher";
 import { UploadButton } from "@/components/documents/upload-button";
+import { EvidenceViewerPanel } from "@/components/pdf/evidence-viewer-panel";
 import { SearchPanel } from "@/components/search/search-panel";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,6 +59,7 @@ export function WorkspaceDetail({ workspaceId }: { workspaceId: string }) {
       <ChatPanel workspaceId={workspaceId} />
       <SearchPanel workspaceId={workspaceId} />
       <JobWatchers workspaceId={workspaceId} />
+      <EvidenceViewerPanel />
     </div>
   );
 }

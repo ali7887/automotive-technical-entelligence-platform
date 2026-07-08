@@ -18,3 +18,25 @@ export const useUploadTracker = create<UploadTrackerState>((set) => ({
       return { activeJobs: rest };
     }),
 }));
+
+/** A citation location to show in the PDF evidence viewer. */
+export interface EvidenceTarget {
+  documentId: string;
+  documentName: string;
+  page: number;
+  /** Verified quote (or chunk excerpt) to highlight via the PDF text layer. */
+  quote?: string;
+  clauseId?: string | null;
+}
+
+interface EvidenceViewerState {
+  target: EvidenceTarget | null;
+  openEvidence: (target: EvidenceTarget) => void;
+  closeEvidence: () => void;
+}
+
+export const useEvidenceViewer = create<EvidenceViewerState>((set) => ({
+  target: null,
+  openEvidence: (target) => set({ target }),
+  closeEvidence: () => set({ target: null }),
+}));
