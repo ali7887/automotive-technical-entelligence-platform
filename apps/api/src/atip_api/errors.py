@@ -28,6 +28,11 @@ class FileTooLargeError(AppError):
     code = "file_too_large"
 
 
+class DocumentNotReadyError(AppError):
+    status_code = 409
+    code = "document_not_ready"
+
+
 class GenerationDisabledError(AppError):
     status_code = 503
     code = "generation_disabled"
