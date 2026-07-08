@@ -20,7 +20,11 @@ Acceptance:
 Acceptance:
 - hybrid retrieval returns accurate clauses with scores
 
-## Phase 3 — Verified RAG
+## Phase 3 — Verified RAG (Done — see PHASE_3_HANDOFF.md)
+- LLM orchestration over retrieved chunks (ask + SSE chat endpoints)
 - structured answer validation (claims + citation mapping)
+- workspace chat UI with streaming and verified inline citations
 Acceptance:
-- zero fabricated citations; clicks highlight correct PDF region
+- zero fabricated citations: every citation is quote-verified against real chunks
+- citation clicks highlight the source (document, clause, page, quote);
+  in-PDF region highlighting is deferred to the PDF viewer work (see handoff)
