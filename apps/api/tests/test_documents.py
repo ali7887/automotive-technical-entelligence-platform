@@ -3,6 +3,8 @@ from io import BytesIO
 
 from pypdf import PdfWriter
 
+from atip_api.config import get_settings
+
 
 def _pdf_bytes(pages: int = 1) -> bytes:
     writer = PdfWriter()
@@ -82,6 +84,47 @@ async def test_upload_to_missing_workspace_returns_404(client):
         files={"file": ("r155.pdf", _pdf_bytes(), "application/pdf")},
     )
     assert response.status_code == 404
+
+
+async def test_get_document_file_streams_pdf(client):
+    ws_id = await _create_workspace(client)
+    upload = (
+        await client.post(
+            f"/api/workspaces/{ws_id}/documents",
+            files={"file": ("r155.pdf", _pdf_bytes(pages=2), "application/pdf")},
+        )
+    ).json()
+
+    response = await client.get(f"/api/documents/{upload['document']['id']}/file")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "inline" in response.headers["content-disposition"]
+    assert "r155.pdf" in response.headers["content-disposition"]
+    assert response.content.startswith(b"%PDF-")
+
+
+async def test_get_document_file_missing_document_returns_404(client):
+    response = await client.get(f"/api/documents/{uuid.uuid4()}/file")
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
+
+
+async def test_get_document_file_missing_stored_file_returns_404(client):
+    ws_id = await _create_workspace(client)
+    upload = (
+        await client.post(
+            f"/api/workspaces/{ws_id}/documents",
+            files={"file": ("r155.pdf", _pdf_bytes(), "application/pdf")},
+        )
+    ).json()
+    doc_id = upload["document"]["id"]
+
+    # uploads are stored as {document_id}.pdf under the configured storage dir
+    (get_settings().storage_dir / f"{doc_id}.pdf").unlink()
+
+    response = await client.get(f"/api/documents/{doc_id}/file")
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
 
 
 async def test_list_documents(client):

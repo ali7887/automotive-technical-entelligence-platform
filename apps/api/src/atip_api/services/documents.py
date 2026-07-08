@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,6 +66,13 @@ class DocumentService:
         if document is None:
             raise NotFoundError(f"Document {document_id} not found")
         return document
+
+    async def get_document_file(self, document_id: uuid.UUID) -> tuple[Document, Path]:
+        document = await self.get_document(document_id)
+        path = Path(document.storage_path)
+        if not path.is_file():
+            raise NotFoundError(f"Stored file for document {document_id} not found")
+        return document, path
 
     async def get_job(self, job_id: uuid.UUID) -> ProcessingJob:
         job = await self._repo.get_job(job_id)

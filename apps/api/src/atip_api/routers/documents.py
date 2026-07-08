@@ -2,6 +2,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atip_api.config import get_settings
@@ -48,6 +49,21 @@ async def list_documents(workspace_id: uuid.UUID, service: ServiceDep) -> list[D
 @router.get("/documents/{document_id}", response_model=DocumentRead)
 async def get_document(document_id: uuid.UUID, service: ServiceDep) -> DocumentRead:
     return DocumentRead.model_validate(await service.get_document(document_id))
+
+
+@router.get(
+    "/documents/{document_id}/file",
+    response_class=FileResponse,
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def get_document_file(document_id: uuid.UUID, service: ServiceDep) -> FileResponse:
+    document, path = await service.get_document_file(document_id)
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=document.name,
+        content_disposition_type="inline",
+    )
 
 
 @router.get("/jobs/{job_id}", response_model=JobRead)
