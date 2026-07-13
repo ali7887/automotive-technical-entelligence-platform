@@ -38,7 +38,7 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "tests_e2e"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
@@ -50,7 +50,7 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "tests_e2e"]
 typeCheckingMode = "basic"
 venvPath = "."
 venv = ".venv"

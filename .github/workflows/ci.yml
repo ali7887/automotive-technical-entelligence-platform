@@ -71,6 +71,17 @@ jobs:
           uv run alembic upgrade head
       - name: Tests
         run: uv run pytest -q
+      - name: E2E release smoke (live server)
+        run: |
+          uv run uvicorn atip_api.main:app --host 127.0.0.1 --port 8000 > uvicorn.log 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/health/live > /dev/null && break
+            sleep 1
+          done
+          uv run pytest tests_e2e -q
+      - name: Server log on E2E failure
+        if: failure()
+        run: cat uvicorn.log || true
 
   web:
     name: Web (eslint, tsc, next build)
