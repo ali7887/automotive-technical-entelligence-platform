@@ -206,6 +206,7 @@ def test_export_markdown_renders_items_and_quotes():
                 risk=EvidenceRisk.UNRATED,
                 review_status=ReviewStatus.NEW,
                 archived_at=None,
+                version=1,
                 citations=[
                     EvidenceCitationRead(
                         id=uuid.uuid4(),

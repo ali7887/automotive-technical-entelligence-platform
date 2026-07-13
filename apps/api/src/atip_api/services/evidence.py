@@ -18,16 +18,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.exc import StaleDataError
 
 from atip_api.ai import llm
 from atip_api.config import Settings
 from atip_api.errors import (
     DocumentNotReadyError,
+    ExtractionInProgressError,
     GenerationDisabledError,
     GenerationFailedError,
     NotFoundError,
     ReviewTransitionError,
+    StaleVersionError,
 )
 from atip_api.models import (
     ActorType,
@@ -230,6 +234,16 @@ def _sources_for(chunks: list[Chunk]) -> list[RetrievedSource]:
     ]
 
 
+def _advisory_key(document_id: uuid.UUID) -> int:
+    """Stable signed-64-bit advisory-lock key derived from the document id."""
+    return int.from_bytes(document_id.bytes[:8], "big", signed=True)
+
+
+_STALE_VERSION_MESSAGE = (
+    "The evidence item was modified by someone else. Reload it and retry with the new version."
+)
+
+
 class EvidenceService:
     def __init__(self, session: AsyncSession, settings: Settings) -> None:
         self._session = session
@@ -238,6 +252,19 @@ class EvidenceService:
         self._documents = DocumentRepository(session)
         self._chunks = ChunkRepository(session)
         self._workspaces = WorkspaceRepository(session)
+
+    async def _commit_versioned(self) -> None:
+        """Commit; a lost optimistic-lock race surfaces as 409, nothing written."""
+        try:
+            await self._session.commit()
+        except StaleDataError as exc:
+            await self._session.rollback()
+            raise StaleVersionError(_STALE_VERSION_MESSAGE) from exc
+
+    @staticmethod
+    def _check_expected_version(item: EvidenceItem, expected_version: int | None) -> None:
+        if expected_version is not None and expected_version != item.version:
+            raise StaleVersionError(_STALE_VERSION_MESSAGE)
 
     async def extract(self, document_id: uuid.UUID) -> EvidenceExtractResponse:
         """Extract requirements for one READY document.
@@ -256,6 +283,16 @@ class EvidenceService:
         if document.status != DocumentStatus.READY:
             raise DocumentNotReadyError(
                 f"Document is {document.status}; evidence extraction needs a READY document"
+            )
+
+        # held until this transaction commits/rolls back; a parallel extraction
+        # of the same document would interleave archive/delete/insert steps
+        locked = await self._session.scalar(
+            select(func.pg_try_advisory_xact_lock(_advisory_key(document_id)))
+        )
+        if not locked:
+            raise ExtractionInProgressError(
+                "An extraction is already running for this document. Try again when it finishes."
             )
 
         chunks = list(await self._chunks.list_by_document(document_id))
@@ -388,6 +425,7 @@ class EvidenceService:
                     risk=item.risk,
                     review_status=item.review_status,
                     citation_count=citation_count,
+                    version=item.version,
                     created_at=item.created_at,
                     updated_at=item.updated_at,
                 )
@@ -420,6 +458,7 @@ class EvidenceService:
             raise ReviewTransitionError(
                 "This item was archived by a re-extraction and is read-only"
             )
+        self._check_expected_version(item, request.expected_version)
 
         previous_status = item.review_status
         previous_risk = item.risk
@@ -441,7 +480,7 @@ class EvidenceService:
             actor_type=request.actor_type,
         )
         await self._repo.add_event(event)
-        await self._session.commit()
+        await self._commit_versioned()
         await self._session.refresh(item)
         await self._session.refresh(event)
         return ReviewResponse(
@@ -461,6 +500,7 @@ class EvidenceService:
         if row is None:
             raise NotFoundError(f"Evidence item {item_id} not found")
         item, document_name = row
+        self._check_expected_version(item, patch.expected_version)
 
         if patch.status is not None and patch.status != item.status:
             previous = item.status
@@ -493,7 +533,7 @@ class EvidenceService:
                     actor_type=ActorType.HUMAN,
                 )
             )
-        await self._session.commit()
+        await self._commit_versioned()
         await self._session.refresh(item)
         return _read(item, document_name)
 
@@ -545,6 +585,7 @@ def _read(item: EvidenceItem, document_name: str) -> EvidenceItemRead:
         risk=item.risk,
         review_status=item.review_status,
         archived_at=item.archived_at,
+        version=item.version,
         citations=[EvidenceCitationRead.model_validate(citation) for citation in item.citations],
         created_at=item.created_at,
         updated_at=item.updated_at,

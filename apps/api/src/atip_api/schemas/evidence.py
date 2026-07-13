@@ -63,6 +63,8 @@ class EvidenceItemRead(BaseModel):
     risk: EvidenceRisk
     review_status: ReviewStatus
     archived_at: datetime | None
+    # optimistic-lock version; send it back as expected_version to detect races
+    version: int
     citations: list[EvidenceCitationRead]
     created_at: datetime
     updated_at: datetime
@@ -80,6 +82,7 @@ class EvidenceItemSummary(BaseModel):
     risk: EvidenceRisk
     review_status: ReviewStatus
     citation_count: int
+    version: int
     created_at: datetime
     updated_at: datetime
 
@@ -102,6 +105,8 @@ class ReviewRequest(BaseModel):
     actor_type: ActorType
     comment: str | None = None
     risk: EvidenceRisk | None = None
+    # optimistic lock: when provided, the item must still be at this version
+    expected_version: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def _check_action_payload(self) -> Self:
@@ -132,6 +137,8 @@ class EvidenceItemUpdate(BaseModel):
     status: EvidenceStatus | None = None
     risk: EvidenceRisk | None = None
     actor_name: str = Field(default="anonymous", min_length=1, max_length=120)
+    # optimistic lock: when provided, the item must still be at this version
+    expected_version: int | None = Field(default=None, ge=1)
 
 
 class EvidenceExtractResponse(BaseModel):

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy import (
     BigInteger,
@@ -60,10 +60,15 @@ class EvidenceItem(Base):
     # set when re-extraction supersedes a reviewed item; archived items keep
     # their citations and audit trail but leave the queue and exports
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # optimistic lock: every UPDATE runs WHERE version = <loaded>; a lost race
+    # raises StaleDataError instead of silently overwriting a concurrent review
+    version: Mapped[int] = mapped_column(server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    __mapper_args__: ClassVar[dict[str, Any]] = {"version_id_col": version}
 
     citations: Mapped[list["EvidenceCitation"]] = relationship(
         back_populates="item", cascade="all, delete-orphan", order_by="EvidenceCitation.page_start"
