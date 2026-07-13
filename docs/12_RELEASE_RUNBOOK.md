@@ -2,7 +2,8 @@
 
 Operational guide for deploying, verifying, and rolling back ATIP.
 Configuration reference: `.env.example` (every variable, purpose, and
-production requirements). Dev setup: `README.md`.
+production requirements); provisioning checklist with sources and secret
+levels: `docs/13_PROVISIONING_CHECKLIST.md`. Dev setup: `README.md`.
 
 ## Topology assumptions
 
@@ -37,7 +38,19 @@ Check each future migration for this property before assuming it.
 
 ## Post-deploy verification
 
-Fastest: run the release smoke suite against the deployment (LLM-free,
+First gate — the standalone smoke script (bash + curl only, no repo checkout
+of Python deps needed; CI runs the same script against its E2E server):
+
+```bash
+scripts/prod_smoke_test.sh https://api.example.com "$EXPECTED_BUILD_SHA"
+```
+
+It verifies `/health/live` (with retries for a just-started container), that
+the reported `build_sha` is the release you meant to ship, and `/health/ready`.
+Exit codes: 0 healthy (a `degraded` readiness passes **with a warning** — see
+Probes & monitoring), 1 unreachable, 2 unhealthy, 3 wrong build deployed.
+
+Deeper: the full release smoke suite against the deployment (LLM-free,
 creates and deletes its own workspace):
 
 ```bash
@@ -66,6 +79,72 @@ Manual minimum, in order:
 Redis is down. Search continues keyword-only (`semantic_used: false`),
 uploads still ingest (chunks persist unembedded and are picked up on
 reprocess). Serve traffic, fix the dependency, don't evict instances.
+This is why readiness returns **200** for degraded: an orchestrator that
+keyed on the body instead of the status code would drain still-useful
+capacity. Alert on `"degraded"` from your monitoring, don't route on it.
+
+### Orchestrator probe configuration
+
+Both probes are cheap GETs on port 8000. Liveness never touches
+dependencies, so it can be aggressive without risking restart loops during a
+dependency outage; readiness gives Postgres checks a little more time.
+The container image also ships its own Docker `HEALTHCHECK` on
+`/health/live` (used by plain `docker run` and Compose automatically).
+
+**Kubernetes**
+
+```yaml
+livenessProbe:
+  httpGet: { path: /health/live, port: 8000 }
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3        # ~30s of a dead process before restart
+readinessProbe:
+  httpGet: { path: /health/ready, port: 8000 }
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5          # readiness pings Postgres; allow for it
+  failureThreshold: 2        # out of rotation after ~20s not_ready
+```
+
+Only 503 `not_ready` (Postgres unreachable or unmigrated) removes the pod
+from rotation; `degraded` is HTTP 200 and keeps serving by design.
+
+**Docker Compose** (production-style override; mirrors the image's built-in
+HEALTHCHECK, shown explicitly so thresholds are tunable):
+
+```yaml
+services:
+  api:
+    image: atip-api
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+```
+
+The runtime image has no curl/wget — use the `python -c` form above.
+Compose has no separate readiness concept; gate dependent services with
+`depends_on: { api: { condition: service_healthy } }` and treat
+`/health/ready` as the load balancer's target instead.
+
+**AWS ECS** (task definition healthcheck + ALB target group):
+
+```json
+"healthCheck": {
+  "command": ["CMD-SHELL",
+    "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=4)\" || exit 1"],
+  "interval": 30, "timeout": 5, "retries": 3, "startPeriod": 15
+}
+```
+
+ALB target group (the readiness side): health check path `/health/ready`,
+success codes `200`, interval 10s, healthy/unhealthy threshold 2/2. A
+`not_ready` 503 drains the target; `degraded` stays in service.
 
 Triage: logs are one JSON object per line with `level`, `logger`,
 `request_id`, `exc_info`. Given a failing response, grep its `request_id`
