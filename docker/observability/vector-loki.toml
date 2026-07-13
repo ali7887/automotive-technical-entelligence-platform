@@ -1,0 +1,18 @@
+# Optional Loki sink — active only when docker-compose.loki.yml mounts this
+# file next to vector.toml. Reuses the `parsed` transform from vector.toml.
+#
+# Labels are LOW-cardinality on purpose (service/environment/level).
+# request_id stays a JSON *field*, never a label — unbounded label values
+# would explode Loki's index. Query it with: {service="api"} | json | request_id="<id>"
+
+[sinks.loki]
+type = "loki"
+inputs = ["parsed"]
+endpoint = "http://loki:3100"
+encoding.codec = "json"
+out_of_order_action = "accept"
+
+  [sinks.loki.labels]
+  service = "{{ service }}"
+  environment = "production"
+  level = "{{ level }}"

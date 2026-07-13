@@ -1,0 +1,39 @@
+# Vector base pipeline: docker logs -> parse JSON -> local file archive.
+# Loaded from /etc/vector by the vector service in docker-compose.prod.yml.
+# The optional Loki sink lives in vector-loki.toml (docker-compose.loki.yml
+# overlay mounts it into the same config dir).
+#
+# Design: the API already emits one JSON object per line. Vector must NOT
+# flatten that into opaque text — parse_json merges the app's fields
+# (timestamp, level, logger, message, request_id, exc_info) into the event,
+# so downstream stores can filter on them directly. Non-JSON lines (redis,
+# qdrant, caddy startup noise) pass through with the raw line in `message`.
+
+[sources.containers]
+type = "docker_logs"
+docker_host = "unix:///var/run/docker.sock"
+# only this stack's containers; the label is set by compose (project name)
+include_labels = ["com.docker.compose.project=atip-prod"]
+
+[transforms.parsed]
+type = "remap"
+inputs = ["containers"]
+source = '''
+svc, err = string(.label."com.docker.compose.service")
+.service = if err == null { svc } else { "unknown" }
+.environment = "production"
+structured, perr = parse_json(string!(.message))
+if perr == null && is_object(structured) {
+  . = merge(., object!(structured))
+}
+del(.label)
+'''
+
+# Always-on archive: one NDJSON file per service per UTC day, on the
+# atip_logs volume. Rotation = new file each day; retention is the ops
+# cron in docs/16_OBSERVABILITY.md. Queryable with plain jq.
+[sinks.archive]
+type = "file"
+inputs = ["parsed"]
+path = "/var/log/atip/%Y-%m-%d/{{ service }}.ndjson"
+encoding.codec = "json"

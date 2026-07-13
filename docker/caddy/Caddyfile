@@ -1,0 +1,62 @@
+# ATIP reverse proxy — TLS termination, routing, security headers.
+# ATIP_DOMAIN / ACME_EMAIL come from docker/.env.production via compose.
+#
+# Automatic HTTPS: Caddy obtains and renews Let's Encrypt certificates for
+# ATIP_DOMAIN on its own (state persists in the caddy_data volume) and
+# redirects HTTP -> HTTPS. With ATIP_DOMAIN=localhost it falls back to its
+# internal CA — that is what local validation uses.
+#
+# X-Request-ID: passed through untouched in both directions. The API
+# generates one when absent and echoes it on every response and problem body.
+# X-Forwarded-For / X-Forwarded-Proto / Host are set by Caddy automatically;
+# the api container runs uvicorn with --proxy-headers to consume them.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$ATIP_DOMAIN} {
+	# Security headers on every response (API and web).
+	# - HSTS: no preload yet; add it only once the domain is committed to TLS forever.
+	# - frame-ancestors 'none' + X-Frame-Options DENY: nothing embeds ATIP;
+	#   the PDF viewer renders via pdf.js canvas, not iframes.
+	# - No full CSP: Next.js inline runtime scripts would need nonce plumbing;
+	#   revisit if the threat model demands it.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+		-Server
+	}
+
+	# Uploads: the API enforces MAX_UPLOAD_MB (default 50) itself and returns
+	# a structured 413 problem+json. This cap is a backstop above that limit,
+	# so legitimate overages still get the API's typed error, while
+	# pathological bodies die at the edge.
+	request_body {
+		max_size 60MB
+	}
+
+	# API routes live under /api/*; the health probes sit at the API root.
+	# /docs and /openapi.json are deliberately NOT routed: they fall through
+	# to the web app's 404, closing the "OpenAPI docs are public" gap noted
+	# in docs/12_RELEASE_RUNBOOK.md.
+	@api path /api/* /health/*
+	handle @api {
+		# flush_interval -1 = flush every write: required so SSE tokens
+		# (/api/workspaces/{id}/chat) stream instead of buffering. No
+		# `encode` on this branch — compression would re-buffer the stream,
+		# and JSON responses are small enough not to matter.
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
+	}
+
+	# Everything else is the Next.js app.
+	handle {
+		encode zstd gzip
+		reverse_proxy web:3000
+	}
+}

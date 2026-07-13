@@ -15,6 +15,9 @@ build/
 .env
 .env.local
 .env.*.local
+# production config/credentials (docker/) — only the .example files are tracked
+.env.production
+.env.secrets
 
 # tooling caches
 .pytest_cache/

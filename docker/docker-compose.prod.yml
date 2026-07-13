@@ -1,0 +1,170 @@
+# ATIP production stack — single-server deployment behind Caddy.
+#
+# Always invoke through the wrapper (pins this file + both env files):
+#   scripts/ops/compose.sh up -d
+#   scripts/ops/compose.sh run --rm migrate
+# Full procedure: docs/14_PRODUCTION_DEPLOYMENT.md
+#
+# Exposure model: ONLY caddy publishes ports (80/443). api and web are
+# reachable exclusively over the edge network; postgres/redis/qdrant live on
+# an internal network with no host ports and no internet egress.
+
+name: atip-prod
+
+networks:
+  edge:
+    # caddy <-> api/web; api keeps internet egress here (OpenAI calls)
+  internal:
+    internal: true   # postgres/redis/qdrant/vector: no host ports, no egress
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  uploads_data:      # STORAGE_DIR — losing it orphans documents (see runbook)
+  caddy_data:        # TLS certificates + ACME account
+  caddy_config:
+  vector_data:       # shipper disk buffer
+  atip_logs:         # vector file-archive sink
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    # HTTP_PORT/HTTPS_PORT exist for local validation only; production uses 80/443
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"   # HTTP/3
+    environment:
+      ATIP_DOMAIN: ${ATIP_DOMAIN:?set ATIP_DOMAIN in docker/.env.production}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in docker/.env.production}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    depends_on:
+      api:
+        condition: service_started   # caddy answers 502 until upstreams are up
+      web:
+        condition: service_started
+
+  api:
+    image: atip-api:${ATIP_TAG:?set ATIP_TAG in docker/.env.production}
+    restart: unless-stopped
+    # --proxy-headers: trust caddy's X-Forwarded-For so the per-IP rate
+    # limiter and access logs see real client IPs, not the proxy's.
+    # "*" is safe here: the api port is never published, so only containers
+    # on the edge network can reach it at all.
+    command:
+      [
+        "uvicorn", "atip_api.main:app",
+        "--host", "0.0.0.0", "--port", "8000",
+        "--proxy-headers", "--forwarded-allow-ips", "*",
+      ]
+    env_file:
+      - .env.production
+      - .env.secrets
+    volumes:
+      - uploads_data:/data/uploads
+    networks: [edge, internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    # liveness healthcheck is baked into the image (/health/live);
+    # readiness stays an HTTP concern: /health/ready via caddy or smoke script
+
+  web:
+    image: atip-web:${ATIP_TAG:?set ATIP_TAG in docker/.env.production}
+    restart: unless-stopped
+    networks: [edge]
+    # NEXT_PUBLIC_API_URL is baked in at image build time — no runtime env
+
+  # One-shot: scripts/ops/compose.sh run --rm migrate
+  # Runs once per release BEFORE rolling the api (never per-container).
+  migrate:
+    image: atip-api:${ATIP_TAG:?set ATIP_TAG in docker/.env.production}
+    profiles: ["ops"]
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    env_file:
+      - .env.production
+      - .env.secrets
+    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in docker/.env.secrets}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/.env.secrets}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in docker/.env.secrets}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Persistence deliberately OFF: redis holds no durable state today
+    # (health check only). Revisit (--appendonly yes + a volume) if it ever
+    # backs rate limiting or caching. Documented in docs/15_BACKUP_AND_RECOVERY.md.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.2
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Log shipper: docker logs -> parse JSON -> file archive (+ Loki via
+  # docker-compose.loki.yml overlay). Needs the docker socket to read
+  # container logs — root-equivalent on the host; accepted single-VPS
+  # tradeoff, see docs/16_OBSERVABILITY.md.
+  vector:
+    image: timberio/vector:0.49.0-alpine
+    restart: unless-stopped
+    command: ["--config-dir", "/etc/vector"]
+    environment:
+      VECTOR_LOG: warn
+    volumes:
+      - ./observability/vector.toml:/etc/vector/vector.toml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - vector_data:/var/lib/vector
+      - atip_logs:/var/log/atip
+    networks: [internal]
+
+  # curl on the internal network for ops scripts (qdrant snapshot API):
+  #   scripts/ops/compose.sh run --rm ops-curl <curl args>
+  ops-curl:
+    image: curlimages/curl:8.11.1
+    profiles: ["ops"]
+    restart: "no"
+    entrypoint: ["curl"]
+    command: ["--version"]
+    networks: [internal]

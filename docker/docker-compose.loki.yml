@@ -1,0 +1,31 @@
+# Optional Loki overlay — centralized log store for the vector shipper.
+# Enable by exporting ATIP_COMPOSE_EXTRA=docker-compose.loki.yml before any
+# scripts/ops/compose.sh call (or pass both -f flags to docker compose).
+#
+# Loki is NOT published on the host. Query it from inside the network
+# (scripts/ops/compose.sh run --rm ops-curl ...) or via an SSH tunnel +
+# temporary port publish; point Grafana at http://loki:3100 if added later.
+# Examples: docs/16_OBSERVABILITY.md.
+
+services:
+  loki:
+    image: grafana/loki:3.4.1
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - loki_data:/loki
+    networks: [internal]
+
+  vector:
+    volumes:
+      - ./observability/vector.toml:/etc/vector/vector.toml:ro
+      - ./observability/vector-loki.toml:/etc/vector/vector-loki.toml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - vector_data:/var/lib/vector
+      - atip_logs:/var/log/atip
+    depends_on:
+      loki:
+        condition: service_started
+
+volumes:
+  loki_data:
