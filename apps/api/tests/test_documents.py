@@ -1,18 +1,13 @@
 import uuid
-from io import BytesIO
-
-from pypdf import PdfWriter
 
 from atip_api.config import get_settings
 
+from .pdf_utils import pdf_with_text
+
 
 def _pdf_bytes(pages: int = 1) -> bytes:
-    writer = PdfWriter()
-    for _ in range(pages):
-        writer.add_blank_page(width=612, height=792)
-    buffer = BytesIO()
-    writer.write(buffer)
-    return buffer.getvalue()
+    # real text layer: Phase 6 upload pre-checks reject text-less PDFs
+    return pdf_with_text(["S5.1 General requirements for lighting devices."] * pages)
 
 
 async def _create_workspace(client) -> str:
@@ -41,20 +36,16 @@ async def test_upload_and_process_pdf(client):
     assert job["error_message"] is None
 
 
-async def test_upload_corrupt_pdf_fails_with_message(client):
+async def test_upload_corrupt_pdf_is_rejected_up_front(client):
+    # Phase 6: corrupt files never become documents; the upload itself fails
     ws_id = await _create_workspace(client)
     response = await client.post(
         f"/api/workspaces/{ws_id}/documents",
         files={"file": ("fake.pdf", b"this is not a pdf", "application/pdf")},
     )
-    assert response.status_code == 201
-    payload = response.json()
-
-    document = (await client.get(f"/api/documents/{payload['document']['id']}")).json()
-    assert document["status"] == "FAILED"
-    job = (await client.get(f"/api/jobs/{payload['job']['id']}")).json()
-    assert job["status"] == "FAILED"
-    assert "not a valid PDF" in job["error_message"]
+    assert response.status_code == 422
+    assert response.json()["code"] == "pdf_corrupted"
+    assert "not a valid PDF" in response.json()["detail"]
 
 
 async def test_upload_rejects_non_pdf_extension(client):

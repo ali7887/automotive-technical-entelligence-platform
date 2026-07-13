@@ -23,19 +23,38 @@ class PdfValidationError(Exception):
     pass
 
 
-def _validate_and_extract(path: Path) -> tuple[str, list[str]]:
-    """Validate the PDF and extract per-page text. Returns (sha256, page_texts)."""
+def _validate_and_extract(path: Path, max_pages: int) -> tuple[str, list[str]]:
+    """Validate the PDF and extract per-page text. Returns (sha256, page_texts).
+
+    Uploads are pre-checked (pdf_checks.precheck_pdf), but the pipeline
+    re-validates fully: it sees every page, and stored files may predate the
+    pre-check or be reprocessed.
+    """
     data = path.read_bytes()
     if not data.startswith(b"%PDF-"):
         raise PdfValidationError("File is not a valid PDF (missing %PDF header)")
     sha256 = hashlib.sha256(data).hexdigest()
     try:
         reader = PdfReader(path)
+        if reader.is_encrypted:
+            raise PdfValidationError(
+                "PDF_ENCRYPTED: password-protected PDFs are not supported"
+            )
+        if len(reader.pages) > max_pages:
+            raise PdfValidationError(
+                f"PDF_TOO_MANY_PAGES: {len(reader.pages)} pages exceeds the {max_pages} limit"
+            )
         page_texts = [page.extract_text() or "" for page in reader.pages]
+    except PdfValidationError:
+        raise
     except Exception as exc:
         raise PdfValidationError(f"Failed to parse PDF: {exc}") from exc
     if not page_texts:
         raise PdfValidationError("PDF contains no pages")
+    if not any(text.strip() for text in page_texts):
+        raise PdfValidationError(
+            "EMPTY_TEXT_LAYER: no extractable text (scanned PDFs are not supported)"
+        )
     return sha256, page_texts
 
 
@@ -122,7 +141,7 @@ async def process_document(document_id: uuid.UUID, job_id: uuid.UUID) -> None:
 
         try:
             sha256, page_texts = await anyio.to_thread.run_sync(
-                _validate_and_extract, Path(document.storage_path)
+                _validate_and_extract, Path(document.storage_path), get_settings().max_pdf_pages
             )
             await _index_chunks(session, document, page_texts)
         except PdfValidationError as exc:

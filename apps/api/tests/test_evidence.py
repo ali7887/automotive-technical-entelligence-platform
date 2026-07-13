@@ -173,16 +173,19 @@ async def test_extract_missing_document_returns_404(client, monkeypatch):
 
 
 async def test_extract_unprocessed_document_returns_409(client, monkeypatch):
+    # corrupt uploads are rejected up front since Phase 6, so force a non-READY
+    # status directly to exercise the extraction guard
+    from atip_api.db import get_session_factory
+    from atip_api.models import Document, DocumentStatus
+
     _install(monkeypatch, ExtractionFakeLLM([]))
     ws_id = await _create_workspace(client)
-    upload = (
-        await client.post(
-            f"/api/workspaces/{ws_id}/documents",
-            files={"file": ("bad.pdf", b"this is not a pdf", "application/pdf")},
-        )
-    ).json()
-    doc_id = upload["document"]["id"]
-    assert (await client.get(f"/api/documents/{doc_id}")).json()["status"] == "FAILED"
+    doc_id = await _upload_ready(client, ws_id, _PHOTO_PAGES, "fmvss108.pdf")
+    async with get_session_factory()() as session:
+        document = await session.get(Document, uuid.UUID(doc_id))
+        assert document is not None
+        document.status = DocumentStatus.PROCESSING
+        await session.commit()
 
     response = await client.post(f"/api/documents/{doc_id}/evidence/extract")
     assert response.status_code == 409

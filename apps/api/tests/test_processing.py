@@ -128,8 +128,9 @@ async def test_embedding_and_qdrant_upsert(client, monkeypatch):
     assert len(fake_client.calls) == 1
 
 
-async def test_blank_pdf_yields_ready_document_without_chunks(client):
-    # scanned/blank PDFs have no text layer; OCR is out of scope, doc stays READY
+async def test_blank_pdf_is_rejected_at_upload(client):
+    # Phase 6: scanned/blank PDFs (no text layer) are rejected up front instead
+    # of becoming READY documents with zero chunks (OCR stays out of scope)
     writer = PdfWriter()
     writer.add_blank_page(width=612, height=792)
     buffer = BytesIO()
@@ -140,6 +141,6 @@ async def test_blank_pdf_yields_ready_document_without_chunks(client):
         f"/api/workspaces/{ws_id}/documents",
         files={"file": ("blank.pdf", buffer.getvalue(), "application/pdf")},
     )
-    doc_id = response.json()["document"]["id"]
-    assert (await client.get(f"/api/documents/{doc_id}")).json()["status"] == "READY"
-    assert await _get_chunks(doc_id) == []
+    assert response.status_code == 422
+    assert response.json()["code"] == "empty_text_layer"
+    assert (await client.get(f"/api/workspaces/{ws_id}/documents")).json() == []

@@ -1,12 +1,14 @@
 import uuid
 from pathlib import Path
 
+import anyio.to_thread
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atip_api.config import Settings
 from atip_api.errors import FileTooLargeError, NotFoundError, UnsupportedFileTypeError
 from atip_api.models import Document, ProcessingJob
+from atip_api.processing.pdf_checks import precheck_pdf
 from atip_api.repositories.documents import DocumentRepository
 from atip_api.repositories.workspaces import WorkspaceRepository
 
@@ -45,6 +47,11 @@ class DocumentService:
                             f"File exceeds the {self._settings.max_upload_mb} MB upload limit"
                         )
                     out.write(chunk)
+            # reject corrupt/encrypted/scanned PDFs before a document exists;
+            # pypdf blocks, so it runs off the event loop
+            await anyio.to_thread.run_sync(
+                precheck_pdf, target, self._settings.max_pdf_pages
+            )
         except BaseException:
             target.unlink(missing_ok=True)
             raise

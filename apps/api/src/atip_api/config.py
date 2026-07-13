@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     storage_dir: Path = Path("storage/uploads")
     max_upload_mb: int = 50
+    max_pdf_pages: int = 2000
     cors_origins: str = "http://localhost:3000"
     log_level: str = "INFO"
     log_json: bool = True
