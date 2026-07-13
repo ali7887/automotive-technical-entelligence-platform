@@ -38,6 +38,8 @@ pnpm dev
 - `uv run pytest` / `uv run ruff check .` / `uv run pyright` / `uv run alembic upgrade head` (in `apps/api`)
 - `uv run pytest tests_e2e -q` (in `apps/api`) — release smoke suite against a **running** API
   (`ATIP_E2E_BASE_URL` to target a deployment; LLM-free and self-cleaning)
+- `scripts/prod_smoke_test.sh <BASE_URL> [EXPECTED_BUILD_SHA]` — standalone post-deploy
+  health + build-identity check (bash + curl only)
 - `docker build -t atip-api apps/api` — production API image
 
 CI (`.github/workflows/ci.yml`) runs exactly these: ruff + pyright + migration
