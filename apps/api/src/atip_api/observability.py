@@ -96,3 +96,11 @@ def configure_logging(settings: Settings) -> None:
             logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
         )
     root.handlers = [handler]
+    # uvicorn installs its own plain-text handlers with propagate=False before
+    # the app loads, so its access/error lines would bypass the format above.
+    # Route them through the root handler; access records are emitted while
+    # the request contextvar is still set, so they gain request_id too.
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uvicorn_logger = logging.getLogger(name)
+        uvicorn_logger.handlers = []
+        uvicorn_logger.propagate = True

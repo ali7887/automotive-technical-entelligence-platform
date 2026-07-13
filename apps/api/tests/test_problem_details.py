@@ -105,3 +105,30 @@ def test_json_log_formatter_shape():
     assert entry["request_id"] == "corr-log-1"
     assert "ValueError: boom" in entry["exc_info"]
     assert entry["timestamp"].endswith("+00:00")
+
+
+def test_configure_logging_routes_uvicorn_loggers_through_root(monkeypatch):
+    """uvicorn's pre-installed handlers must be replaced by propagation to the
+    root JSON handler, or access/error lines bypass the structured format."""
+    import atip_api.observability as observability
+    from atip_api.config import get_settings
+
+    root = logging.getLogger()
+    saved_root_handlers, saved_root_level = root.handlers[:], root.level
+    uvicorn_loggers = [
+        logging.getLogger(name) for name in ("uvicorn", "uvicorn.error", "uvicorn.access")
+    ]
+    saved_states = [(lg.handlers[:], lg.propagate) for lg in uvicorn_loggers]
+    try:
+        for lg in uvicorn_loggers:  # simulate uvicorn's own logging setup
+            lg.handlers = [logging.NullHandler()]
+            lg.propagate = False
+        monkeypatch.setattr(observability, "_configured", False)
+        observability.configure_logging(get_settings())
+        for lg in uvicorn_loggers:
+            assert lg.handlers == []
+            assert lg.propagate is True
+    finally:
+        root.handlers, root.level = saved_root_handlers, saved_root_level
+        for lg, (handlers, propagate) in zip(uvicorn_loggers, saved_states, strict=True):
+            lg.handlers, lg.propagate = handlers, propagate

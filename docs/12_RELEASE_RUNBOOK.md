@@ -146,9 +146,34 @@ ALB target group (the readiness side): health check path `/health/ready`,
 success codes `200`, interval 10s, healthy/unhealthy threshold 2/2. A
 `not_ready` 503 drains the target; `degraded` stays in service.
 
-Triage: logs are one JSON object per line with `level`, `logger`,
-`request_id`, `exc_info`. Given a failing response, grep its `request_id`
-(from the problem body or `X-Request-ID` header) across API logs.
+### Querying the logs
+
+Every line the API process emits — including uvicorn access and startup
+lines — is one JSON object with `timestamp`, `level`, `logger`, `message`,
+plus `request_id` on request-scoped records and `exc_info` on errors.
+`request_id` is the only correlation key (there is no separate trace_id);
+clients can supply their own via the `X-Request-ID` header, and every
+problem-details body echoes it back.
+
+Given a failing response, take `request_id` from the problem body (or the
+`X-Request-ID` response header) and pull everything that request did:
+
+```bash
+# All log records for one request (docker; same idea for any log store)
+docker logs <api-container> 2>&1 | grep '"request_id": "<id>"'
+
+# Same with jq, readable
+docker logs <api-container> 2>&1 | jq -c 'select(.request_id == "<id>")'
+
+# All errors in a window, with tracebacks
+docker logs <api-container> 2>&1 | jq -c 'select(.level == "ERROR") | {timestamp, request_id, message, exc_info}'
+
+# Access-log view: every 5xx served
+docker logs <api-container> 2>&1 | jq -c 'select(.logger == "uvicorn.access" and (.message | test(" 5[0-9][0-9]$")))'
+```
+
+In an aggregator (CloudWatch Logs Insights, Loki, etc.) filter on the same
+JSON fields: `request_id = "<id>"` or `level = "ERROR"`.
 
 ## Rollback
 
