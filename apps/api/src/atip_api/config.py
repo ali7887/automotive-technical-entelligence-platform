@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = Field(default=60.0, gt=0)
     qdrant_timeout_seconds: int = Field(default=10, ge=1)
     rrf_k: int = Field(default=60, ge=1)
+    # optional cross-encoder reranking of fused candidates (Cohere/Jina/TEI-style
+    # HTTP API); any failure falls back to plain RRF ordering, never an error
+    rerank_enabled: bool = False
+    rerank_url: str | None = None
+    rerank_model: str | None = None
+    rerank_api_key: SecretStr | None = None
+    rerank_timeout_seconds: float = Field(default=10.0, gt=0)
+    rerank_candidates: int = Field(default=30, ge=1, le=100)
     storage_dir: Path = Path("storage/uploads")
     max_upload_mb: int = Field(default=50, ge=1)
     max_pdf_pages: int = Field(default=2000, ge=1)
@@ -63,6 +71,12 @@ class Settings(BaseSettings):
         if self.openai_api_key is None:
             return None
         return self.openai_api_key.get_secret_value() or None
+
+    @property
+    def rerank_api_key_value(self) -> str | None:
+        if self.rerank_api_key is None:
+            return None
+        return self.rerank_api_key.get_secret_value() or None
 
     def validate_for_release(self) -> None:
         """Fail fast on configuration that is unambiguously wrong in production.

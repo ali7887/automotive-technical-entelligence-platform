@@ -18,6 +18,9 @@ class SearchScores(BaseModel):
     keyword_score: float | None = None
     semantic_rank: int | None = None
     semantic_score: float | None = None
+    # set only when the optional reranker scored this chunk
+    rerank_rank: int | None = None
+    rerank_score: float | None = None
 
 
 class SearchResult(BaseModel):
@@ -45,4 +48,6 @@ class SearchResponse(BaseModel):
     # False when embeddings are not configured or the semantic leg failed;
     # results are then keyword-only
     semantic_used: bool
+    # False when reranking is disabled or the reranker failed (RRF order used)
+    rerank_used: bool = False
     results: list[SearchResult]

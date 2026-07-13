@@ -6,9 +6,10 @@ from collections.abc import Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atip_api import vectorstore
-from atip_api.ai import embeddings
+from atip_api.ai import embeddings, rerank
 from atip_api.config import Settings
 from atip_api.errors import NotFoundError
+from atip_api.models import Chunk
 from atip_api.repositories.chunks import ChunkRepository
 from atip_api.repositories.workspaces import WorkspaceRepository
 from atip_api.schemas.search import SearchRequest, SearchResponse, SearchResult, SearchScores
@@ -56,9 +57,32 @@ class SearchService:
 
         fused = reciprocal_rank_fusion([keyword_ranked, semantic_ranked], k=self._settings.rrf_k)
         # deterministic order: fused score desc, then chunk id as tiebreak
-        top_ids = sorted(fused, key=lambda cid: (-fused[cid], cid))[: request.top_k]
+        ranked_ids = sorted(fused, key=lambda cid: (-fused[cid], cid))
 
-        chunks_by_id = {chunk.id: chunk for chunk in await self._chunks.get_by_ids(top_ids)}
+        # widen the hydrated candidate pool when a reranker will reorder it
+        reranker = rerank.get_rerank_client(self._settings)
+        candidate_count = (
+            max(request.top_k, self._settings.rerank_candidates)
+            if reranker is not None
+            else request.top_k
+        )
+        candidate_ids = ranked_ids[:candidate_count]
+        chunks_by_id = {chunk.id: chunk for chunk in await self._chunks.get_by_ids(candidate_ids)}
+        candidate_ids = [cid for cid in candidate_ids if cid in chunks_by_id]
+
+        rerank_rank, rerank_score, rerank_used = await self._rerank_leg(
+            reranker, request.query, candidate_ids, chunks_by_id, request.top_k
+        )
+        if rerank_used:
+            # reranked candidates first in reranker order; anything the reranker
+            # did not score keeps its RRF position behind them (deterministic)
+            top_ids = sorted(
+                candidate_ids,
+                key=lambda cid: (rerank_rank.get(cid, len(candidate_ids) + 1), -fused[cid], cid),
+            )[: request.top_k]
+        else:
+            top_ids = candidate_ids[: request.top_k]
+
         keyword_rank = {cid: i + 1 for i, cid in enumerate(keyword_ranked)}
         semantic_rank = {cid: i + 1 for i, cid in enumerate(semantic_ranked)}
 
@@ -82,6 +106,8 @@ class SearchService:
                     keyword_score=keyword_scores.get(chunk.id),
                     semantic_rank=semantic_rank.get(chunk.id),
                     semantic_score=semantic_scores.get(chunk.id),
+                    rerank_rank=rerank_rank.get(chunk.id),
+                    rerank_score=rerank_score.get(chunk.id),
                 ),
             )
             for chunk_id in top_ids
@@ -93,8 +119,36 @@ class SearchService:
             document_id=request.document_id,
             top_k=request.top_k,
             semantic_used=semantic_used,
+            rerank_used=rerank_used,
             results=results,
         )
+
+    async def _rerank_leg(
+        self,
+        reranker: rerank.RerankClient | None,
+        query: str,
+        candidate_ids: list[uuid.UUID],
+        chunks_by_id: dict[uuid.UUID, Chunk],
+        top_k: int,
+    ) -> tuple[dict[uuid.UUID, int], dict[uuid.UUID, float], bool]:
+        """Rerank candidates; on any failure return empty maps and rerank_used=False."""
+        if reranker is None or not candidate_ids:
+            return {}, {}, False
+        try:
+            hits = await reranker.rerank(
+                query, [chunks_by_id[cid].text for cid in candidate_ids], top_k
+            )
+        except Exception:
+            logger.exception("Reranker failed; falling back to RRF ordering")
+            return {}, {}, False
+        rank: dict[uuid.UUID, int] = {}
+        score: dict[uuid.UUID, float] = {}
+        for position, (index, relevance) in enumerate(hits, start=1):
+            cid = candidate_ids[index]
+            if cid not in rank:
+                rank[cid] = position
+                score[cid] = relevance
+        return rank, score, True
 
     async def _semantic_leg(
         self, workspace_id: uuid.UUID, request: SearchRequest, leg_limit: int
