@@ -81,3 +81,26 @@ Acceptance:
 - corrupt/encrypted/scanned PDF uploads return clean RFC 7807 422/413 payloads
 - transient DB/LLM outages retry up to 3 times and degrade gracefully
   (search stays available keyword-only); Phase 3–5 regressions all green
+
+## Phase 7 — Release Readiness & Go-Live Preparation (Done — see PHASE_7_HANDOFF.md)
+- environment-aware configuration: ENVIRONMENT=production fail-fasts on
+  dev-default DB credentials / relative STORAGE_DIR; OPENAI_API_KEY is a
+  SecretStr; numeric limits validated at startup; .env.example is the
+  complete config reference
+- liveness (/health/live, never touches deps, reports version + BUILD_SHA)
+  and readiness (/health/ready: Postgres required, Redis/Qdrant only degrade)
+  split from the strict /health diagnostic
+- GitHub Actions CI: lockfile-frozen installs, ruff/pyright/pytest with real
+  service containers, migration round-trip (base ↔ head), eslint/tsc/next
+  build, live-server E2E smoke job
+- production API container (multi-stage uv, non-root, ships alembic for
+  same-image migrations, liveness-only HEALTHCHECK)
+- release smoke suite (apps/api/tests_e2e): 7 deterministic LLM-free flows
+  over real HTTP, reusable as the post-deploy check via ATIP_E2E_BASE_URL
+- docs/12_RELEASE_RUNBOOK.md: topology, deploy/migration order, probes,
+  healthy-but-degraded semantics, rollback notes, known limitations
+Acceptance:
+- a misconfigured production boot fails with an actionable error, never a
+  silently insecure default
+- CI reproduces every documented local check from a clean clone
+- the smoke suite passes against a live deployment without an LLM key

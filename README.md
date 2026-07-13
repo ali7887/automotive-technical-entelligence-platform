@@ -29,13 +29,21 @@ pnpm dev
 - Web: http://localhost:3000
 - API: http://127.0.0.1:8000 (OpenAPI at `/docs`)
 - Health: http://127.0.0.1:8000/health — verifies Postgres (migrated), Redis, and the Qdrant collection E2E
+  (`/health/live` and `/health/ready` are the orchestrator probes — see docs/12_RELEASE_RUNBOOK.md)
 
 ## Commands
 
-- `pnpm dev | lint | typecheck` (workspace-wide)
+- `pnpm dev | lint | typecheck` (workspace-wide); `pnpm --filter web build` — production web build
 - `pnpm --filter web gen:api` — regenerate the typed API client from the running API's OpenAPI schema
 - `uv run pytest` / `uv run ruff check .` / `uv run pyright` / `uv run alembic upgrade head` (in `apps/api`)
+- `uv run pytest tests_e2e -q` (in `apps/api`) — release smoke suite against a **running** API
+  (`ATIP_E2E_BASE_URL` to target a deployment; LLM-free and self-cleaning)
+- `docker build -t atip-api apps/api` — production API image
+
+CI (`.github/workflows/ci.yml`) runs exactly these: ruff + pyright + migration
+round-trip + pytest + E2E smoke for the API, and eslint + tsc + `next build` for the web.
 
 API tests need the docker Postgres running; they use a separate `atip_test` database.
 
+Configuration reference: `.env.example`. Deploy/rollback/monitoring: `docs/12_RELEASE_RUNBOOK.md`.
 See `docs/` for product specs and roadmap; `CLAUDE.md` for contribution rules.

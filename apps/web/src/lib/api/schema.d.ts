@@ -14,8 +14,56 @@ export interface paths {
         /**
          * Health
          * @description E2E health: Postgres reachable+migrated, Redis PING, Qdrant collection + vector dim.
+         *
+         *     Full diagnostic — any dependency error yields 503. Use /health/live and
+         *     /health/ready for orchestrator probes; this endpoint is for monitoring
+         *     dashboards and post-deploy verification.
          */
         get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Liveness
+         * @description Liveness probe: the process answers. Never touches dependencies, so a
+         *     dependency outage can't make an orchestrator restart-loop the API.
+         */
+        get: operations["liveness_health_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Readiness
+         * @description Readiness probe: Postgres (reachable + migrated) is required — without it
+         *     every endpoint fails. Redis/Qdrant errors only mark the instance degraded:
+         *     search falls back to keyword-only, so evicting the pod would lose capacity
+         *     for no gain.
+         */
+        get: operations["readiness_health_ready_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -768,6 +816,8 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "degraded";
+            /** Version */
+            version: string;
             /** Services */
             services: {
                 [key: string]: components["schemas"]["ServiceStatus"];
@@ -799,6 +849,39 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "PENDING" | "PROCESSING" | "READY" | "FAILED";
+        /**
+         * LivenessResponse
+         * @description Process is up. No dependency checks — safe for orchestrator liveness probes.
+         */
+        LivenessResponse: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "ok";
+            /** Version */
+            version: string;
+            /** Environment */
+            environment: string;
+            /** Build Sha */
+            build_sha?: string | null;
+        };
+        /**
+         * ReadinessResponse
+         * @description Can serve traffic. Postgres is required; Redis/Qdrant outages only degrade
+         *     (keyword-only search keeps working), so they must not evict the instance.
+         */
+        ReadinessResponse: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "degraded" | "not_ready";
+            /** Services */
+            services: {
+                [key: string]: components["schemas"]["ServiceStatus"];
+            };
+        };
         /**
          * RetrievedSourceRead
          * @description A retrieved chunk as numbered in the prompt; streamed before generation.
@@ -1056,6 +1139,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    liveness_health_live_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LivenessResponse"];
+                };
+            };
+        };
+    };
+    readiness_health_ready_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponse"];
                 };
             };
         };
