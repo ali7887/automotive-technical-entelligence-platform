@@ -158,9 +158,17 @@ export function ReviewDetailDrawer({
           actor_type: "HUMAN",
           comment: input.comment,
           risk: input.risk,
+          // optimistic lock: act on the version this drawer is showing
+          expected_version: item?.version,
         },
       });
-      if (!data) throw new Error(errorMessage(error, "Review action failed"));
+      if (!data) {
+        const failure = new Error(errorMessage(error, "Review action failed")) as Error & {
+          code?: string;
+        };
+        failure.code = (error as { code?: string } | undefined)?.code;
+        throw failure;
+      }
       return data;
     },
     onSuccess: (result) => {
@@ -172,7 +180,15 @@ export function ReviewDetailDrawer({
       queryClient.invalidateQueries({ queryKey: ["evidence", workspaceId] });
       toast.success(REVIEW_ACTION_LABELS[result.event.action]);
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error: Error & { code?: string }) => {
+      if (error.code === "stale_version") {
+        // someone else changed the item; refetch so the drawer shows the truth
+        queryClient.invalidateQueries({ queryKey: ["evidence-item", itemId] });
+        queryClient.invalidateQueries({ queryKey: ["evidence-history", itemId] });
+        queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+      }
+      toast.error(error.message);
+    },
   });
 
   const act = (action: SubmittableReviewAction, extra?: { comment?: string; risk?: EvidenceRisk }) =>

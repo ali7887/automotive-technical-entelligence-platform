@@ -549,6 +549,8 @@ export interface components {
             review_status: components["schemas"]["ReviewStatus"];
             /** Archived At */
             archived_at: string | null;
+            /** Version */
+            version: number;
             /** Citations */
             citations: components["schemas"]["EvidenceCitationRead"][];
             /**
@@ -591,6 +593,8 @@ export interface components {
             review_status: components["schemas"]["ReviewStatus"];
             /** Archived At */
             archived_at: string | null;
+            /** Version */
+            version: number;
             /** Citations */
             citations: components["schemas"]["EvidenceCitationRead"][];
             /**
@@ -632,6 +636,8 @@ export interface components {
             review_status: components["schemas"]["ReviewStatus"];
             /** Archived At */
             archived_at: string | null;
+            /** Version */
+            version: number;
             /** Citations */
             citations: components["schemas"]["EvidenceCitationRead"][];
             /**
@@ -674,6 +680,8 @@ export interface components {
             review_status: components["schemas"]["ReviewStatus"];
             /** Citation Count */
             citation_count: number;
+            /** Version */
+            version: number;
             /**
              * Created At
              * Format: date-time
@@ -700,6 +708,8 @@ export interface components {
              * @default anonymous
              */
             actor_name: string;
+            /** Expected Version */
+            expected_version?: number | null;
         };
         /**
          * EvidenceMapExport
@@ -866,6 +876,8 @@ export interface components {
             /** Comment */
             comment?: string | null;
             risk?: components["schemas"]["EvidenceRisk"] | null;
+            /** Expected Version */
+            expected_version?: number | null;
         };
         /** ReviewResponse */
         ReviewResponse: {

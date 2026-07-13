@@ -105,14 +105,26 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
   const update = useMutation({
     mutationFn: async (input: {
       itemId: string;
+      version: number;
       patch: { status?: EvidenceStatus; risk?: EvidenceRisk };
     }) => {
       const { data, error } = await api.PATCH("/api/evidence/{item_id}", {
         params: { path: { item_id: input.itemId } },
-        // inline edits are audited; record who made them
-        body: { ...input.patch, actor_name: reviewerOrAnonymous(loadReviewerName()) },
+        // inline edits are audited; record who made them and which version of
+        // the row they were looking at (optimistic lock)
+        body: {
+          ...input.patch,
+          actor_name: reviewerOrAnonymous(loadReviewerName()),
+          expected_version: input.version,
+        },
       });
-      if (!data) throw new Error(errorMessage(error, "Update failed"));
+      if (!data) {
+        const failure = new Error(errorMessage(error, "Update failed")) as Error & {
+          code?: string;
+        };
+        failure.code = (error as { code?: string } | undefined)?.code;
+        throw failure;
+      }
       return data;
     },
     onSuccess: (updated) => {
@@ -124,7 +136,13 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
       queryClient.invalidateQueries({ queryKey: ["evidence-item", updated.id] });
       queryClient.invalidateQueries({ queryKey: ["evidence-history", updated.id] });
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error: Error & { code?: string }) => {
+      if (error.code === "stale_version") {
+        // reload the table so the selects show what actually won the race
+        queryClient.invalidateQueries({ queryKey: ["evidence", workspaceId] });
+      }
+      toast.error(error.message);
+    },
   });
 
   const exportJson = async () => {
@@ -292,6 +310,7 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
                       onChange={(event) =>
                         update.mutate({
                           itemId: item.id,
+                          version: item.version,
                           patch: { status: event.target.value as EvidenceStatus },
                         })
                       }
@@ -311,6 +330,7 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
                       onChange={(event) =>
                         update.mutate({
                           itemId: item.id,
+                          version: item.version,
                           patch: { risk: event.target.value as EvidenceRisk },
                         })
                       }

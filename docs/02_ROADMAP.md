@@ -62,3 +62,22 @@ Acceptance:
 - rejected transitions write nothing; audit history is strictly append-only
 - re-extraction never destroys reviewed evidence (verified by integration
   tests and a live smoke test)
+
+## Phase 6 — Hardening & Edge Cases (Done — see PHASE_6_HANDOFF.md)
+- optimistic locking on evidence items (version column + expected_version);
+  lost races → 409, never a silent overwrite; re-extraction holds a
+  per-document advisory lock (parallel extraction → 409)
+- RFC 7807 problem details on every error (type/title/status/detail/instance
+  + code/request_id extensions); internals masked on 500s and logged
+- correlation IDs (X-Request-ID) + structured one-line JSON logging
+- rate limiting on /ask, /chat, and extraction (429 + Retry-After)
+- hardened PDF intake: signature/encryption/page-cap/text-layer checks at
+  upload (422/413 problems), blocking parsing kept off the event loop
+- dependency resilience: deterministic timeouts (OpenAI/Qdrant), tenacity
+  backoff with jitter, DB pre-ping + retried connection acquisition,
+  keyword-only search fallback when embeddings are down
+Acceptance:
+- concurrent edits to one evidence item produce 409, data is never clobbered
+- corrupt/encrypted/scanned PDF uploads return clean RFC 7807 422/413 payloads
+- transient DB/LLM outages retry up to 3 times and degrade gracefully
+  (search stays available keyword-only); Phase 3–5 regressions all green
