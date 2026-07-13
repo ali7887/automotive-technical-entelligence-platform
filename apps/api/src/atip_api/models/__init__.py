@@ -1,19 +1,31 @@
 from atip_api.models.chunk import Chunk
 from atip_api.models.document import Document
-from atip_api.models.enums import DocumentStatus, EvidenceRisk, EvidenceStatus, JobStatus
-from atip_api.models.evidence import EvidenceCitation, EvidenceItem
+from atip_api.models.enums import (
+    ActorType,
+    DocumentStatus,
+    EvidenceRisk,
+    EvidenceStatus,
+    JobStatus,
+    ReviewAction,
+    ReviewStatus,
+)
+from atip_api.models.evidence import EvidenceCitation, EvidenceItem, EvidenceReviewEvent
 from atip_api.models.processing_job import ProcessingJob
 from atip_api.models.workspace import Workspace
 
 __all__ = [
+    "ActorType",
     "Chunk",
     "Document",
     "DocumentStatus",
     "EvidenceCitation",
     "EvidenceItem",
+    "EvidenceReviewEvent",
     "EvidenceRisk",
     "EvidenceStatus",
     "JobStatus",
     "ProcessingJob",
+    "ReviewAction",
+    "ReviewStatus",
     "Workspace",
 ]

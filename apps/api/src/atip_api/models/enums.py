@@ -32,3 +32,37 @@ class EvidenceRisk(enum.StrEnum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
+
+
+class ReviewStatus(enum.StrEnum):
+    """Workflow state of the human review of an extracted evidence item.
+
+    Orthogonal to EvidenceStatus (compliance verdict): this tracks whether a
+    human has reviewed the extraction itself.
+    """
+
+    NEW = "NEW"
+    IN_REVIEW = "IN_REVIEW"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    NEEDS_REVISION = "NEEDS_REVISION"
+
+
+class ReviewAction(enum.StrEnum):
+    """Actions recorded in the append-only review audit trail."""
+
+    START_REVIEW = "START_REVIEW"
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    REQUEST_REVISION = "REQUEST_REVISION"
+    COMMENT = "COMMENT"
+    SET_RISK = "SET_RISK"
+    # compliance-status inline edit via PATCH (Phase 4 Evidence Map table)
+    SET_STATUS = "SET_STATUS"
+    # system event: item archived because the document was re-extracted
+    EXTRACTION_ARCHIVED = "EXTRACTION_ARCHIVED"
+
+
+class ActorType(enum.StrEnum):
+    HUMAN = "HUMAN"
+    SYSTEM = "SYSTEM"

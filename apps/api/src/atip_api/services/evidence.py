@@ -1,9 +1,13 @@
-"""Verified requirement extraction for the Evidence Map.
+"""Verified requirement extraction and review workflow for the Evidence Map.
 
-The LLM proposes requirements with citation quotes over batches of one
-document's chunks; each quote is verified verbatim against the exact chunk text
-(same rules as services/verification.py). Only requirements with at least one
-validated citation are persisted — weak evidence never enters the Evidence Map.
+Extraction: the LLM proposes requirements with citation quotes over batches of
+one document's chunks; each quote is verified verbatim against the exact chunk
+text (same rules as services/verification.py). Only requirements with at least
+one validated citation are persisted — weak evidence never enters the map.
+
+Review: evidence items carry a workflow `review_status` that changes only
+through the audited state machine below; every mutation appends an append-only
+`EvidenceReviewEvent`. Review data never touches citation provenance snapshots.
 """
 
 import json
@@ -23,18 +27,36 @@ from atip_api.errors import (
     GenerationDisabledError,
     GenerationFailedError,
     NotFoundError,
+    ReviewTransitionError,
 )
-from atip_api.models import Chunk, DocumentStatus, EvidenceCitation, EvidenceItem
+from atip_api.models import (
+    ActorType,
+    Chunk,
+    DocumentStatus,
+    EvidenceCitation,
+    EvidenceItem,
+    EvidenceReviewEvent,
+    EvidenceRisk,
+    ReviewAction,
+    ReviewStatus,
+)
 from atip_api.repositories.chunks import ChunkRepository
 from atip_api.repositories.documents import DocumentRepository
-from atip_api.repositories.evidence import EvidenceRepository
+from atip_api.repositories.evidence import EvidenceRepository, QueueSort
 from atip_api.repositories.workspaces import WorkspaceRepository
 from atip_api.schemas.evidence import (
     EvidenceCitationRead,
     EvidenceExtractResponse,
+    EvidenceItemDetail,
+    EvidenceItemExport,
     EvidenceItemRead,
+    EvidenceItemSummary,
     EvidenceItemUpdate,
     EvidenceMapExport,
+    EvidenceQueuePage,
+    ReviewEventRead,
+    ReviewRequest,
+    ReviewResponse,
 )
 from atip_api.services.evidence_prompts import EXTRACTION_SYSTEM_PROMPT, build_extraction_prompt
 from atip_api.services.rag import GENERATION_DISABLED_MESSAGE, GENERATION_FAILED_MESSAGE
@@ -47,6 +69,37 @@ _BATCH_SIZE = 12
 
 _WS_RE = re.compile(r"\s+")
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$")
+
+# review state machine (authoritative; documented in PHASE_5_HANDOFF.md)
+_START_REVIEW_FROM = frozenset(
+    {
+        ReviewStatus.NEW,
+        ReviewStatus.NEEDS_REVISION,
+        ReviewStatus.APPROVED,
+        ReviewStatus.REJECTED,
+    }
+)
+_DECISIONS = {
+    ReviewAction.APPROVE: ReviewStatus.APPROVED,
+    ReviewAction.REJECT: ReviewStatus.REJECTED,
+    ReviewAction.REQUEST_REVISION: ReviewStatus.NEEDS_REVISION,
+}
+
+
+def next_review_status(current: ReviewStatus, action: ReviewAction) -> ReviewStatus:
+    """Pure transition function; raises ReviewTransitionError on invalid moves."""
+    if action == ReviewAction.START_REVIEW:
+        if current not in _START_REVIEW_FROM:
+            raise ReviewTransitionError(f"Cannot start review from status {current}")
+        return ReviewStatus.IN_REVIEW
+    if action in _DECISIONS:
+        if current != ReviewStatus.IN_REVIEW:
+            raise ReviewTransitionError(
+                f"Action {action} requires status IN_REVIEW (item is {current})"
+            )
+        return _DECISIONS[action]
+    # COMMENT / SET_RISK never change the workflow status
+    return current
 
 
 class ProposedCitation(BaseModel):
@@ -189,8 +242,9 @@ class EvidenceService:
     async def extract(self, document_id: uuid.UUID) -> EvidenceExtractResponse:
         """Extract requirements for one READY document.
 
-        Re-extraction replaces the document's existing evidence items,
-        including their reviewer-set status/risk.
+        Re-extraction lifecycle: items that were never reviewed (NEW, no audit
+        events) are deleted; items with review state or history are archived —
+        their citations and audit trail are preserved but they leave the queue.
         """
         client = llm.get_llm_client(self._settings)
         if client is None:
@@ -249,9 +303,16 @@ class EvidenceService:
         if not chunks:
             warnings.append("Document has no chunks; nothing to extract.")
 
-        await self._repo.delete_by_document(document.id)
+        items_archived = await self._archive_reviewed(document.id)
+        await self._repo.delete_unreviewed_by_document(document.id)
         await self._repo.add_all(items)
         await self._session.commit()
+
+        if items_archived:
+            warnings.append(
+                f"{items_archived} previously reviewed item(s) were archived, not deleted; "
+                "their review history is preserved."
+            )
 
         return EvidenceExtractResponse(
             document_id=document.id,
@@ -259,9 +320,31 @@ class EvidenceService:
             requirements_seen=requirements_seen,
             requirements_dropped=requirements_dropped,
             citations_dropped=citations_dropped,
+            items_archived=items_archived,
             warnings=warnings,
             model=self._settings.llm_model,
         )
+
+    async def _archive_reviewed(self, document_id: uuid.UUID) -> int:
+        """Archive live items that carry review state/history; audit each one."""
+        reviewed = await self._repo.list_reviewed_live_by_document(document_id)
+        now = datetime.now(UTC)
+        for item in reviewed:
+            item.archived_at = now
+            await self._repo.add_event(
+                EvidenceReviewEvent(
+                    evidence_item_id=item.id,
+                    action=ReviewAction.EXTRACTION_ARCHIVED,
+                    previous_status=item.review_status,
+                    next_status=item.review_status,
+                    previous_risk=item.risk,
+                    next_risk=item.risk,
+                    comment="Archived because the document was re-extracted.",
+                    actor_name="system",
+                    actor_type=ActorType.SYSTEM,
+                )
+            )
+        return len(reviewed)
 
     async def list_items(
         self, workspace_id: uuid.UUID, document_id: uuid.UUID | None = None
@@ -271,29 +354,183 @@ class EvidenceService:
         rows = await self._repo.list_by_workspace(workspace_id, document_id)
         return [_read(item, document_name) for item, document_name in rows]
 
-    async def update_item(self, item_id: uuid.UUID, patch: EvidenceItemUpdate) -> EvidenceItemRead:
+    async def queue(
+        self,
+        *,
+        workspace_id: uuid.UUID | None,
+        document_id: uuid.UUID | None,
+        review_status: ReviewStatus | None,
+        risk: EvidenceRisk | None,
+        include_archived: bool,
+        sort: QueueSort,
+        limit: int,
+        offset: int,
+    ) -> EvidenceQueuePage:
+        rows, total = await self._repo.query_queue(
+            workspace_id=workspace_id,
+            document_id=document_id,
+            review_status=review_status,
+            risk=risk,
+            include_archived=include_archived,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+        )
+        return EvidenceQueuePage(
+            items=[
+                EvidenceItemSummary(
+                    id=item.id,
+                    workspace_id=item.workspace_id,
+                    document_id=item.document_id,
+                    document_name=document_name,
+                    requirement_text=item.requirement_text,
+                    status=item.status,
+                    risk=item.risk,
+                    review_status=item.review_status,
+                    citation_count=citation_count,
+                    created_at=item.created_at,
+                    updated_at=item.updated_at,
+                )
+                for item, document_name, citation_count in rows
+            ],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def detail(self, item_id: uuid.UUID) -> EvidenceItemDetail:
         row = await self._repo.get(item_id)
         if row is None:
             raise NotFoundError(f"Evidence item {item_id} not found")
         item, document_name = row
-        if patch.status is not None:
+        events = await self._repo.list_events(item_id)
+        base = _read(item, document_name)
+        return EvidenceItemDetail(
+            **base.model_dump(),
+            event_count=len(events),
+            last_event=ReviewEventRead.model_validate(events[-1]) if events else None,
+        )
+
+    async def review(self, item_id: uuid.UUID, request: ReviewRequest) -> ReviewResponse:
+        row = await self._repo.get(item_id)
+        if row is None:
+            raise NotFoundError(f"Evidence item {item_id} not found")
+        item, document_name = row
+        if item.archived_at is not None:
+            raise ReviewTransitionError(
+                "This item was archived by a re-extraction and is read-only"
+            )
+
+        previous_status = item.review_status
+        previous_risk = item.risk
+        next_status = next_review_status(previous_status, ReviewAction(request.action))
+
+        item.review_status = next_status
+        if request.action == ReviewAction.SET_RISK and request.risk is not None:
+            item.risk = request.risk
+
+        event = EvidenceReviewEvent(
+            evidence_item_id=item.id,
+            action=ReviewAction(request.action),
+            previous_status=previous_status,
+            next_status=next_status,
+            previous_risk=previous_risk,
+            next_risk=item.risk,
+            comment=request.comment,
+            actor_name=request.actor_name,
+            actor_type=request.actor_type,
+        )
+        await self._repo.add_event(event)
+        await self._session.commit()
+        await self._session.refresh(item)
+        await self._session.refresh(event)
+        return ReviewResponse(
+            item=_read(item, document_name), event=ReviewEventRead.model_validate(event)
+        )
+
+    async def history(self, item_id: uuid.UUID) -> list[ReviewEventRead]:
+        if await self._repo.get(item_id) is None:
+            raise NotFoundError(f"Evidence item {item_id} not found")
+        events = await self._repo.list_events(item_id)
+        return [ReviewEventRead.model_validate(event) for event in events]
+
+    async def update_item(self, item_id: uuid.UUID, patch: EvidenceItemUpdate) -> EvidenceItemRead:
+        """Inline compliance-status/risk edits (Phase 4 table). Audited: each
+        changed field appends a review event; review_status is untouchable here."""
+        row = await self._repo.get(item_id)
+        if row is None:
+            raise NotFoundError(f"Evidence item {item_id} not found")
+        item, document_name = row
+
+        if patch.status is not None and patch.status != item.status:
+            previous = item.status
             item.status = patch.status
-        if patch.risk is not None:
+            await self._repo.add_event(
+                EvidenceReviewEvent(
+                    evidence_item_id=item.id,
+                    action=ReviewAction.SET_STATUS,
+                    previous_status=item.review_status,
+                    next_status=item.review_status,
+                    previous_risk=item.risk,
+                    next_risk=item.risk,
+                    actor_name=patch.actor_name,
+                    actor_type=ActorType.HUMAN,
+                    extra={"field": "status", "previous": previous, "next": patch.status},
+                )
+            )
+        if patch.risk is not None and patch.risk != item.risk:
+            previous_risk = item.risk
             item.risk = patch.risk
+            await self._repo.add_event(
+                EvidenceReviewEvent(
+                    evidence_item_id=item.id,
+                    action=ReviewAction.SET_RISK,
+                    previous_status=item.review_status,
+                    next_status=item.review_status,
+                    previous_risk=previous_risk,
+                    next_risk=patch.risk,
+                    actor_name=patch.actor_name,
+                    actor_type=ActorType.HUMAN,
+                )
+            )
         await self._session.commit()
         await self._session.refresh(item)
         return _read(item, document_name)
 
-    async def export(self, workspace_id: uuid.UUID) -> EvidenceMapExport:
+    async def export(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        document_id: uuid.UUID | None = None,
+        review_status: ReviewStatus | None = None,
+        risk: EvidenceRisk | None = None,
+        include_history: bool = False,
+    ) -> EvidenceMapExport:
         workspace = await self._workspaces.get(workspace_id)
         if workspace is None:
             raise NotFoundError(f"Workspace {workspace_id} not found")
-        rows = await self._repo.list_by_workspace(workspace_id)
+        rows = await self._repo.list_by_workspace(
+            workspace_id, document_id, review_status=review_status, risk=risk
+        )
+        history: dict[uuid.UUID, list[EvidenceReviewEvent]] = {}
+        if include_history:
+            history = await self._repo.list_events_for_items([item.id for item, _ in rows])
         return EvidenceMapExport(
             workspace_id=workspace_id,
             workspace_name=workspace.name,
             generated_at=datetime.now(UTC),
-            items=[_read(item, document_name) for item, document_name in rows],
+            include_history=include_history,
+            items=[
+                EvidenceItemExport(
+                    **_read(item, document_name).model_dump(),
+                    history=(
+                        [ReviewEventRead.model_validate(e) for e in history.get(item.id, [])]
+                        if include_history
+                        else None
+                    ),
+                )
+                for item, document_name in rows
+            ],
         )
 
 
@@ -306,6 +543,8 @@ def _read(item: EvidenceItem, document_name: str) -> EvidenceItemRead:
         requirement_text=item.requirement_text,
         status=item.status,
         risk=item.risk,
+        review_status=item.review_status,
+        archived_at=item.archived_at,
         citations=[EvidenceCitationRead.model_validate(citation) for citation in item.citations],
         created_at=item.created_at,
         updated_at=item.updated_at,
@@ -332,7 +571,8 @@ def export_markdown(export: EvidenceMapExport) -> str:
             [
                 f"### {index}. {item.requirement_text}",
                 "",
-                f"- Status: {item.status} | Risk: {item.risk} | Clause: {clause}",
+                f"- Status: {item.status} | Risk: {item.risk} | Review: {item.review_status} "
+                f"| Clause: {clause}",
             ]
         )
         for citation in item.citations:
@@ -343,6 +583,19 @@ def export_markdown(export: EvidenceMapExport) -> str:
             )
             clause_part = f"{citation.clause_id}, " if citation.clause_id else ""
             lines.append(f'- Evidence ({clause_part}{pages}): "{citation.quote}"')
+        if item.history:
+            lines.append("- Review history:")
+            for event in item.history:
+                detail = f" — {event.comment}" if event.comment else ""
+                transition = (
+                    f" ({event.previous_status} → {event.next_status})"
+                    if event.previous_status != event.next_status
+                    else ""
+                )
+                lines.append(
+                    f"  - {event.created_at.isoformat()} {event.action} "
+                    f"by {event.actor_name}{transition}{detail}"
+                )
         lines.append("")
     if not export.items:
         lines.extend(["_No evidence items. Run extraction on a processed document._", ""])

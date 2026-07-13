@@ -33,6 +33,11 @@ class DocumentNotReadyError(AppError):
     code = "document_not_ready"
 
 
+class ReviewTransitionError(AppError):
+    status_code = 409
+    code = "invalid_review_transition"
+
+
 class GenerationDisabledError(AppError):
     status_code = 503
     code = "generation_disabled"

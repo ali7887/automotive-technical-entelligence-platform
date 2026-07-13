@@ -183,10 +183,10 @@ def test_empty_requirement_text_is_dropped():
 def test_export_markdown_renders_items_and_quotes():
     from datetime import UTC, datetime
 
-    from atip_api.models.enums import EvidenceRisk, EvidenceStatus
+    from atip_api.models.enums import EvidenceRisk, EvidenceStatus, ReviewStatus
     from atip_api.schemas.evidence import (
         EvidenceCitationRead,
-        EvidenceItemRead,
+        EvidenceItemExport,
         EvidenceMapExport,
     )
 
@@ -196,7 +196,7 @@ def test_export_markdown_renders_items_and_quotes():
         workspace_name="Homologation",
         generated_at=now,
         items=[
-            EvidenceItemRead(
+            EvidenceItemExport(
                 id=uuid.uuid4(),
                 workspace_id=WORKSPACE_ID,
                 document_id=DOCUMENT_ID,
@@ -204,6 +204,8 @@ def test_export_markdown_renders_items_and_quotes():
                 requirement_text="Luminous intensity max 125 cd.",
                 status=EvidenceStatus.OPEN,
                 risk=EvidenceRisk.UNRATED,
+                review_status=ReviewStatus.NEW,
+                archived_at=None,
                 citations=[
                     EvidenceCitationRead(
                         id=uuid.uuid4(),
