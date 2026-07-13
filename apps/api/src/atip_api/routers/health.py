@@ -9,9 +9,14 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import VectorParams
 from sqlalchemy import text
 
-from atip_api.config import Settings, get_settings
+from atip_api.config import Settings, get_app_version, get_settings
 from atip_api.db import get_engine
-from atip_api.schemas.health import HealthResponse, ServiceStatus
+from atip_api.schemas.health import (
+    HealthResponse,
+    LivenessResponse,
+    ReadinessResponse,
+    ServiceStatus,
+)
 
 router = APIRouter(tags=["health"])
 
@@ -86,7 +91,12 @@ async def _check_qdrant(settings: Settings) -> ServiceStatus:
 
 @router.get("/health", response_model=HealthResponse, responses={503: {"model": HealthResponse}})
 async def health(response: Response) -> HealthResponse:
-    """E2E health: Postgres reachable+migrated, Redis PING, Qdrant collection + vector dim."""
+    """E2E health: Postgres reachable+migrated, Redis PING, Qdrant collection + vector dim.
+
+    Full diagnostic — any dependency error yields 503. Use /health/live and
+    /health/ready for orchestrator probes; this endpoint is for monitoring
+    dashboards and post-deploy verification.
+    """
     settings = get_settings()
     postgres, redis_status, qdrant = await asyncio.gather(
         _check_postgres(), _check_redis(settings), _check_qdrant(settings)
@@ -95,4 +105,41 @@ async def health(response: Response) -> HealthResponse:
     healthy = all(service.status == "ok" for service in services.values())
     if not healthy:
         response.status_code = 503
-    return HealthResponse(status="ok" if healthy else "degraded", services=services)
+    return HealthResponse(
+        status="ok" if healthy else "degraded", version=get_app_version(), services=services
+    )
+
+
+@router.get("/health/live", response_model=LivenessResponse)
+async def liveness() -> LivenessResponse:
+    """Liveness probe: the process answers. Never touches dependencies, so a
+    dependency outage can't make an orchestrator restart-loop the API."""
+    settings = get_settings()
+    return LivenessResponse(
+        status="ok",
+        version=get_app_version(),
+        environment=settings.environment,
+        build_sha=settings.build_sha,
+    )
+
+
+@router.get(
+    "/health/ready",
+    response_model=ReadinessResponse,
+    responses={503: {"model": ReadinessResponse}},
+)
+async def readiness(response: Response) -> ReadinessResponse:
+    """Readiness probe: Postgres (reachable + migrated) is required — without it
+    every endpoint fails. Redis/Qdrant errors only mark the instance degraded:
+    search falls back to keyword-only, so evicting the pod would lose capacity
+    for no gain."""
+    settings = get_settings()
+    postgres, redis_status, qdrant = await asyncio.gather(
+        _check_postgres(), _check_redis(settings), _check_qdrant(settings)
+    )
+    services = {"postgres": postgres, "redis": redis_status, "qdrant": qdrant}
+    if postgres.status != "ok":
+        response.status_code = 503
+        return ReadinessResponse(status="not_ready", services=services)
+    degraded = any(service.status != "ok" for service in services.values())
+    return ReadinessResponse(status="degraded" if degraded else "ready", services=services)
