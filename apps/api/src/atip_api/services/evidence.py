@@ -229,6 +229,7 @@ def _sources_for(chunks: list[Chunk]) -> list[RetrievedSource]:
             page_start=chunk.page_start,
             page_end=chunk.page_end,
             text=chunk.text,
+            section_path=chunk.section_path,
         )
         for i, chunk in enumerate(chunks)
     ]

@@ -50,7 +50,11 @@ def _source_header(source: RetrievedSource) -> str:
         if source.page_start == source.page_end
         else f"pp. {source.page_start}-{source.page_end}"
     )
-    return f"[{source.index}] Document: {source.document_name} | Clause: {clause} | {pages}"
+    header = f"[{source.index}] Document: {source.document_name} | Clause: {clause} | {pages}"
+    # ancestry trail gives the model the surrounding structure of a precise chunk
+    if source.section_path and source.section_path != source.clause_id:
+        header += f"\nSection: {source.section_path}"
+    return header
 
 
 def build_user_prompt(sources: list[RetrievedSource], question: str) -> str:

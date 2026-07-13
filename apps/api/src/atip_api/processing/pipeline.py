@@ -71,14 +71,26 @@ async def _index_chunks(session: AsyncSession, document: Document, pages: list[s
     drafts = chunk_pages(pages)
     existing = await repo.list_by_document(document.id)
     existing_by_id = {chunk.id: chunk for chunk in existing}
-    draft_ids = {draft.chunk_id(document.id) for draft in drafts}
+    drafts_by_id = {draft.chunk_id(document.id): draft for draft in drafts}
+    draft_ids = set(drafts_by_id)
 
     stale_ids = [chunk_id for chunk_id in existing_by_id if chunk_id not in draft_ids]
     await repo.delete_by_ids(stale_ids)
 
+    # structural metadata is not part of the chunk id: refresh it in place on
+    # surviving chunks so reprocessing doubles as the metadata backfill path
+    for chunk_id, chunk in existing_by_id.items():
+        draft = drafts_by_id.get(chunk_id)
+        if draft is not None and (chunk.parent_clause_id, chunk.section_path) != (
+            draft.parent_clause_id,
+            draft.section_path,
+        ):
+            chunk.parent_clause_id = draft.parent_clause_id
+            chunk.section_path = draft.section_path
+
     new_chunks = [
         Chunk(
-            id=draft.chunk_id(document.id),
+            id=chunk_id,
             document_id=document.id,
             workspace_id=document.workspace_id,
             chunk_index=draft.chunk_index,
@@ -86,12 +98,14 @@ async def _index_chunks(session: AsyncSession, document: Document, pages: list[s
             page_end=draft.page_end,
             clause_id=draft.clause_id,
             heading=draft.heading,
+            parent_clause_id=draft.parent_clause_id,
+            section_path=draft.section_path,
             text=draft.text,
             token_count=draft.token_count,
             content_hash=draft.content_hash,
         )
-        for draft in drafts
-        if draft.chunk_id(document.id) not in existing_by_id
+        for chunk_id, draft in drafts_by_id.items()
+        if chunk_id not in existing_by_id
     ]
     await repo.add_all(new_chunks)
 

@@ -5,6 +5,8 @@ from atip_api.processing.chunking import (
     MAX_CHUNK_TOKENS,
     ChunkDraft,
     chunk_pages,
+    clause_ancestors,
+    clause_lineage,
     detect_clause,
     estimate_tokens,
 )
@@ -108,3 +110,66 @@ def test_hash_matches_text():
     for draft in drafts:
         assert draft.content_hash == hashlib.sha256(draft.text.encode("utf-8")).hexdigest()
         assert isinstance(draft, ChunkDraft)
+
+
+def test_clause_ancestors():
+    assert clause_ancestors("S14.8.7") == ["S14", "S14.8"]
+    assert clause_ancestors("6.4.3.1") == ["6", "6.4", "6.4.3"]
+    assert clause_ancestors("S4") == []
+
+
+def test_section_path_tracks_seen_ancestors():
+    pages = [
+        "\n".join(
+            [
+                "S14. Requirements",
+                *[_CLAUSE_BODY.strip()] * 12,
+                "S14.8 Test conditions",
+                *[_CLAUSE_BODY.strip()] * 12,
+                "S14.8.7 Dummy positioning",
+                *[_CLAUSE_BODY.strip()] * 12,
+            ]
+        )
+    ]
+    drafts = chunk_pages(pages)
+    leaf = next(draft for draft in drafts if draft.clause_id == "S14.8.7")
+    assert leaf.parent_clause_id == "S14.8"
+    assert leaf.section_path == (
+        "S14 Requirements > S14.8 Test conditions > S14.8.7 Dummy positioning"
+    )
+    root = next(draft for draft in drafts if draft.clause_id == "S14")
+    assert root.parent_clause_id is None
+    assert root.section_path == "S14 Requirements"
+
+
+def test_lineage_skips_unprinted_intermediate_levels():
+    # 6.1.4 never appears as a heading; the parent is the nearest *seen* ancestor
+    pages = [
+        "\n".join(
+            [
+                "6.1 General specifications",
+                *[_CLAUSE_BODY.strip()] * 12,
+                "6.1.4.2 Colour of light emitted",
+                *[_CLAUSE_BODY.strip()] * 12,
+            ]
+        )
+    ]
+    leaf = next(draft for draft in chunk_pages(pages) if draft.clause_id == "6.1.4.2")
+    assert leaf.parent_clause_id == "6.1"
+    assert leaf.section_path == (
+        "6.1 General specifications > 6.1.4.2 Colour of light emitted"
+    )
+
+
+def test_prose_chunks_have_no_lineage():
+    drafts = chunk_pages(["Plain prose with no numbering at all.\nAnother line of prose."])
+    assert all(draft.parent_clause_id is None for draft in drafts)
+    assert all(draft.section_path is None for draft in drafts)
+    assert clause_lineage(None, {}) == (None, None)
+
+
+def test_lineage_is_deterministic_across_runs():
+    pages = _regulation_pages()
+    assert [d.section_path for d in chunk_pages(pages)] == [
+        d.section_path for d in chunk_pages(pages)
+    ]

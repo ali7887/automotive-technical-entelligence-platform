@@ -148,6 +148,7 @@ class RAGService:
                 page_start=result.page_start,
                 page_end=result.page_end,
                 text=result.text,
+                section_path=result.section_path,
             )
             for i, result in enumerate(search.results)
         ]

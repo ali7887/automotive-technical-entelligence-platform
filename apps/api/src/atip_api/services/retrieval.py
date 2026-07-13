@@ -74,6 +74,7 @@ class SearchService:
                 page_end=chunk.page_end,
                 clause_id=chunk.clause_id,
                 heading=chunk.heading,
+                section_path=chunk.section_path,
                 text=chunk.text,
                 scores=SearchScores(
                     rrf=fused[chunk.id],

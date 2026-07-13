@@ -48,6 +48,10 @@ class Chunk(Base):
     page_end: Mapped[int]
     clause_id: Mapped[str | None] = mapped_column(String(64))
     heading: Mapped[str | None] = mapped_column(String(512))
+    # structural lineage (Phase 10): nearest clause ancestor that appears in the
+    # document, and the readable ancestry trail ("S14 … > S14.8 … > S14.8.7 …")
+    parent_clause_id: Mapped[str | None] = mapped_column(String(64))
+    section_path: Mapped[str | None] = mapped_column(String(1024))
     text: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int]
     content_hash: Mapped[str] = mapped_column(String(64))

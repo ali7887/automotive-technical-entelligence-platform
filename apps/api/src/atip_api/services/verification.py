@@ -51,6 +51,8 @@ class RetrievedSource:
     page_start: int
     page_end: int
     text: str
+    # clause ancestry trail shown to the LLM as structural context
+    section_path: str | None = None
 
 
 class ClaimCitation(BaseModel):

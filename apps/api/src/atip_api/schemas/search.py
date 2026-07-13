@@ -31,6 +31,8 @@ class SearchResult(BaseModel):
     page_end: int
     clause_id: str | None
     heading: str | None
+    # clause ancestry trail, e.g. "S14 Requirements > S14.8 … > S14.8.7 …"
+    section_path: str | None = None
     text: str
     scores: SearchScores
 
