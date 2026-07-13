@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     log_level: str = "INFO"
     log_json: bool = True
+    # per-client per-minute limits on resource-heavy endpoints
+    rate_limit_enabled: bool = True
+    rate_limit_ask_per_minute: int = 30
+    rate_limit_extract_per_minute: int = 10
 
     @property
     def cors_origin_list(self) -> list[str]:

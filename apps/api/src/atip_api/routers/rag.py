@@ -9,10 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from atip_api.config import get_settings
 from atip_api.db import get_session
+from atip_api.ratelimit import rate_limited
 from atip_api.schemas.rag import AskRequest, AskResponse
 from atip_api.services.rag import RAGService
 
 router = APIRouter(prefix="/api", tags=["rag"])
+
+# /ask and /chat share one budget: both trigger retrieval + LLM generation
+_ASK_LIMIT = rate_limited("ask", lambda settings: settings.rate_limit_ask_per_minute)
 
 
 def get_rag_service(
@@ -24,7 +28,9 @@ def get_rag_service(
 ServiceDep = Annotated[RAGService, Depends(get_rag_service)]
 
 
-@router.post("/workspaces/{workspace_id}/ask", response_model=AskResponse)
+@router.post(
+    "/workspaces/{workspace_id}/ask", response_model=AskResponse, dependencies=[_ASK_LIMIT]
+)
 async def ask_workspace(
     workspace_id: uuid.UUID, request: AskRequest, service: ServiceDep
 ) -> AskResponse:
@@ -44,7 +50,7 @@ async def _sse_stream(
         yield _sse(event, payload)
 
 
-@router.get("/workspaces/{workspace_id}/chat")
+@router.get("/workspaces/{workspace_id}/chat", dependencies=[_ASK_LIMIT])
 async def chat_workspace(
     workspace_id: uuid.UUID,
     service: ServiceDep,

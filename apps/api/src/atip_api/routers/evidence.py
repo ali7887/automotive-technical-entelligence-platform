@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from atip_api.config import get_settings
 from atip_api.db import get_session
 from atip_api.models.enums import EvidenceRisk, ReviewStatus
+from atip_api.ratelimit import rate_limited
 from atip_api.repositories.evidence import QueueSort
 from atip_api.schemas.evidence import (
     EvidenceExtractResponse,
@@ -38,6 +39,7 @@ ServiceDep = Annotated[EvidenceService, Depends(get_evidence_service)]
     "/documents/{document_id}/evidence/extract",
     response_model=EvidenceExtractResponse,
     status_code=201,
+    dependencies=[rate_limited("extract", lambda s: s.rate_limit_extract_per_minute)],
 )
 async def extract_evidence(document_id: uuid.UUID, service: ServiceDep) -> EvidenceExtractResponse:
     """Extract verified requirements. Unreviewed prior items are replaced;

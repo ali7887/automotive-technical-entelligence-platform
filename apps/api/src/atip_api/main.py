@@ -17,6 +17,7 @@ from atip_api.errors import (
     validation_error_handler,
 )
 from atip_api.observability import CorrelationIdMiddleware, configure_logging
+from atip_api.ratelimit import SlidingWindowRateLimiter
 from atip_api.routers.documents import router as documents_router
 from atip_api.routers.evidence import router as evidence_router
 from atip_api.routers.health import router as health_router
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings)
     app = FastAPI(title="ATIP API", version="0.1.0", lifespan=lifespan)
+    app.state.rate_limiter = SlidingWindowRateLimiter()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
