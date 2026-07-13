@@ -1,0 +1,19 @@
+# Context for the web image build (apps/web/Dockerfile, repo-root context).
+# The API image builds from apps/api with its own .dockerignore.
+.git
+.github
+node_modules
+**/node_modules
+**/.next
+**/.env
+**/.env.*
+!**/.env.example
+apps/api
+docker
+docs
+prompts
+scripts
+storage
+**/.pytest_cache
+**/.ruff_cache
+**/__pycache__
