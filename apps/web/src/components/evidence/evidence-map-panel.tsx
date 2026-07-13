@@ -19,6 +19,7 @@ import {
 import { api, API_BASE_URL } from "@/lib/api/client";
 import type { EvidenceItem, EvidenceRisk, EvidenceStatus } from "@/lib/api/types";
 import { errorMessage } from "@/lib/api/types";
+import { loadReviewerName, reviewerOrAnonymous } from "@/lib/reviewer";
 import { useEvidenceViewer } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,7 @@ const RISK_CLASSES: Record<EvidenceRisk, string> = {
 export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
   const queryClient = useQueryClient();
   const [documentId, setDocumentId] = useState("");
+  const [includeHistory, setIncludeHistory] = useState(false);
   const openEvidence = useEvidenceViewer((state) => state.openEvidence);
 
   const { data: documents } = useQuery({
@@ -86,10 +88,16 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["evidence", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["review-queue"] });
       const dropped = result.requirements_dropped
         ? ` (${result.requirements_dropped} without verifiable evidence dropped)`
         : "";
       toast.success(`Extracted ${result.items.length} verified requirement${result.items.length === 1 ? "" : "s"}${dropped}`);
+      if (result.items_archived > 0) {
+        toast.info(
+          `${result.items_archived} reviewed item${result.items_archived === 1 ? "" : "s"} archived with history preserved`,
+        );
+      }
     },
     onError: (error) => toast.error(error.message),
   });
@@ -101,7 +109,8 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
     }) => {
       const { data, error } = await api.PATCH("/api/evidence/{item_id}", {
         params: { path: { item_id: input.itemId } },
-        body: input.patch,
+        // inline edits are audited; record who made them
+        body: { ...input.patch, actor_name: reviewerOrAnonymous(loadReviewerName()) },
       });
       if (!data) throw new Error(errorMessage(error, "Update failed"));
       return data;
@@ -110,13 +119,20 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
       queryClient.setQueryData<EvidenceItem[]>(["evidence", workspaceId], (current) =>
         current?.map((item) => (item.id === updated.id ? updated : item)),
       );
+      // inline edits append audit events, so queue rows and histories change too
+      queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["evidence-item", updated.id] });
+      queryClient.invalidateQueries({ queryKey: ["evidence-history", updated.id] });
     },
     onError: (error) => toast.error(error.message),
   });
 
   const exportJson = async () => {
     const { data, error } = await api.GET("/api/workspaces/{workspace_id}/evidence/export", {
-      params: { path: { workspace_id: workspaceId } },
+      params: {
+        path: { workspace_id: workspaceId },
+        query: { include_history: includeHistory },
+      },
     });
     if (!data) {
       toast.error(errorMessage(error, "Export failed"));
@@ -142,6 +158,15 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={includeHistory}
+              onChange={(event) => setIncludeHistory(event.target.checked)}
+              className="size-3.5 accent-primary"
+            />
+            Include review history
+          </label>
           <Button
             variant="outline"
             size="sm"
@@ -156,7 +181,9 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
             size="sm"
             disabled={!items || items.length === 0}
             render={
-              <a href={`${API_BASE_URL}/api/workspaces/${workspaceId}/evidence/export.md`} />
+              <a
+                href={`${API_BASE_URL}/api/workspaces/${workspaceId}/evidence/export.md?include_history=${includeHistory}`}
+              />
             }
           >
             <Download className="size-3.5" />
@@ -194,7 +221,8 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
           Extract requirements
         </Button>
         <p className="text-xs text-muted-foreground">
-          Re-extracting replaces the document&rsquo;s existing items and their review state.
+          Re-extracting replaces unreviewed items; reviewed items are archived with their
+          history intact.
         </p>
       </form>
 

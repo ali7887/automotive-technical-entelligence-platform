@@ -10,6 +10,7 @@ import { JobWatchers } from "@/components/documents/job-watcher";
 import { UploadButton } from "@/components/documents/upload-button";
 import { EvidenceMapPanel } from "@/components/evidence/evidence-map-panel";
 import { EvidenceViewerPanel } from "@/components/pdf/evidence-viewer-panel";
+import { ReviewQueuePanel } from "@/components/review/review-queue-panel";
 import { SearchPanel } from "@/components/search/search-panel";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -59,6 +60,7 @@ export function WorkspaceDetail({ workspaceId }: { workspaceId: string }) {
       <DocumentsTable workspaceId={workspaceId} />
       <ChatPanel workspaceId={workspaceId} />
       <EvidenceMapPanel workspaceId={workspaceId} />
+      <ReviewQueuePanel workspaceId={workspaceId} />
       <SearchPanel workspaceId={workspaceId} />
       <JobWatchers workspaceId={workspaceId} />
       <EvidenceViewerPanel />

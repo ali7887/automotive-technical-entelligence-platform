@@ -204,7 +204,8 @@ export interface paths {
         put?: never;
         /**
          * Extract Evidence
-         * @description Extract verified requirements; replaces the document's existing evidence.
+         * @description Extract verified requirements. Unreviewed prior items are replaced;
+         *     items with review state or history are archived, never deleted.
          */
         post: operations["extract_evidence_api_documents__document_id__evidence_extract_post"];
         delete?: never;
@@ -230,7 +231,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/evidence/review-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Review Queue
+         * @description Paginated review queue; archived items are excluded unless requested.
+         */
+        get: operations["review_queue_api_evidence_review_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/evidence/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Evidence Item */
+        get: operations["get_evidence_item_api_evidence__item_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Evidence Item */
+        patch: operations["update_evidence_item_api_evidence__item_id__patch"];
+        trace?: never;
+    };
+    "/api/evidence/{item_id}/review": {
         parameters: {
             query?: never;
             header?: never;
@@ -239,12 +278,35 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Review Evidence Item
+         * @description Apply one audited review action; invalid transitions return 409.
+         */
+        post: operations["review_evidence_item_api_evidence__item_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evidence/{item_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Evidence Item History
+         * @description Full append-only audit trail of the item, oldest first.
+         */
+        get: operations["evidence_item_history_api_evidence__item_id__history_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Evidence Item */
-        patch: operations["update_evidence_item_api_evidence__item_id__patch"];
+        patch?: never;
         trace?: never;
     };
     "/api/workspaces/{workspace_id}/evidence/export": {
@@ -285,6 +347,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ActorType
+         * @enum {string}
+         */
+        ActorType: "HUMAN" | "SYSTEM";
         /** AnswerVerification */
         AnswerVerification: {
             /**
@@ -449,10 +516,95 @@ export interface components {
             requirements_dropped: number;
             /** Citations Dropped */
             citations_dropped: number;
+            /** Items Archived */
+            items_archived: number;
             /** Warnings */
             warnings: string[];
             /** Model */
             model: string;
+        };
+        /** EvidenceItemDetail */
+        EvidenceItemDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Name */
+            document_name: string;
+            /** Requirement Text */
+            requirement_text: string;
+            status: components["schemas"]["EvidenceStatus"];
+            risk: components["schemas"]["EvidenceRisk"];
+            review_status: components["schemas"]["ReviewStatus"];
+            /** Archived At */
+            archived_at: string | null;
+            /** Citations */
+            citations: components["schemas"]["EvidenceCitationRead"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Event Count */
+            event_count: number;
+            last_event: components["schemas"]["ReviewEventRead"] | null;
+        };
+        /** EvidenceItemExport */
+        EvidenceItemExport: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Name */
+            document_name: string;
+            /** Requirement Text */
+            requirement_text: string;
+            status: components["schemas"]["EvidenceStatus"];
+            risk: components["schemas"]["EvidenceRisk"];
+            review_status: components["schemas"]["ReviewStatus"];
+            /** Archived At */
+            archived_at: string | null;
+            /** Citations */
+            citations: components["schemas"]["EvidenceCitationRead"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** History */
+            history?: components["schemas"]["ReviewEventRead"][] | null;
         };
         /** EvidenceItemRead */
         EvidenceItemRead: {
@@ -477,6 +629,9 @@ export interface components {
             requirement_text: string;
             status: components["schemas"]["EvidenceStatus"];
             risk: components["schemas"]["EvidenceRisk"];
+            review_status: components["schemas"]["ReviewStatus"];
+            /** Archived At */
+            archived_at: string | null;
             /** Citations */
             citations: components["schemas"]["EvidenceCitationRead"][];
             /**
@@ -491,32 +646,93 @@ export interface components {
             updated_at: string;
         };
         /**
+         * EvidenceItemSummary
+         * @description Queue row: enough metadata to render the Review Queue without citations.
+         */
+        EvidenceItemSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Name */
+            document_name: string;
+            /** Requirement Text */
+            requirement_text: string;
+            status: components["schemas"]["EvidenceStatus"];
+            risk: components["schemas"]["EvidenceRisk"];
+            review_status: components["schemas"]["ReviewStatus"];
+            /** Citation Count */
+            citation_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
          * EvidenceItemUpdate
-         * @description Reviewer-owned fields; at least one must be provided.
+         * @description Reviewer-owned inline edits (Phase 4 table); at least one must be provided.
+         *
+         *     These edits are audited: each change appends a review event. The workflow
+         *     `review_status` cannot be changed here — use the review endpoint.
          */
         EvidenceItemUpdate: {
             status?: components["schemas"]["EvidenceStatus"] | null;
             risk?: components["schemas"]["EvidenceRisk"] | null;
+            /**
+             * Actor Name
+             * @default anonymous
+             */
+            actor_name: string;
         };
         /**
          * EvidenceMapExport
          * @description JSON Evidence Map export; the Markdown export renders the same items.
          */
         EvidenceMapExport: {
-            /**
-             * Workspace Id
-             * Format: uuid
-             */
-            workspace_id: string;
+            /** Workspace Id */
+            workspace_id: string | null;
             /** Workspace Name */
-            workspace_name: string;
+            workspace_name: string | null;
             /**
              * Generated At
              * Format: date-time
              */
             generated_at: string;
+            /**
+             * Include History
+             * @default false
+             */
+            include_history: boolean;
             /** Items */
-            items: components["schemas"]["EvidenceItemRead"][];
+            items: components["schemas"]["EvidenceItemExport"][];
+        };
+        /** EvidenceQueuePage */
+        EvidenceQueuePage: {
+            /** Items */
+            items: components["schemas"]["EvidenceItemSummary"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
         };
         /**
          * EvidenceRisk
@@ -599,6 +815,72 @@ export interface components {
             /** Page End */
             page_end: number;
         };
+        /**
+         * ReviewAction
+         * @description Actions recorded in the append-only review audit trail.
+         * @enum {string}
+         */
+        ReviewAction: "START_REVIEW" | "APPROVE" | "REJECT" | "REQUEST_REVISION" | "COMMENT" | "SET_RISK" | "SET_STATUS" | "EXTRACTION_ARCHIVED";
+        /** ReviewEventRead */
+        ReviewEventRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Evidence Item Id
+             * Format: uuid
+             */
+            evidence_item_id: string;
+            action: components["schemas"]["ReviewAction"];
+            previous_status: components["schemas"]["ReviewStatus"];
+            next_status: components["schemas"]["ReviewStatus"];
+            previous_risk: components["schemas"]["EvidenceRisk"];
+            next_risk: components["schemas"]["EvidenceRisk"];
+            /** Comment */
+            comment: string | null;
+            /** Actor Name */
+            actor_name: string;
+            actor_type: components["schemas"]["ActorType"];
+            /** Extra */
+            extra: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ReviewRequest */
+        ReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "START_REVIEW" | "APPROVE" | "REJECT" | "REQUEST_REVISION" | "COMMENT" | "SET_RISK";
+            /** Actor Name */
+            actor_name: string;
+            actor_type: components["schemas"]["ActorType"];
+            /** Comment */
+            comment?: string | null;
+            risk?: components["schemas"]["EvidenceRisk"] | null;
+        };
+        /** ReviewResponse */
+        ReviewResponse: {
+            item: components["schemas"]["EvidenceItemRead"];
+            event: components["schemas"]["ReviewEventRead"];
+        };
+        /**
+         * ReviewStatus
+         * @description Workflow state of the human review of an extracted evidence item.
+         *
+         *     Orthogonal to EvidenceStatus (compliance verdict): this tracks whether a
+         *     human has reviewed the extraction itself.
+         * @enum {string}
+         */
+        ReviewStatus: "NEW" | "IN_REVIEW" | "APPROVED" | "REJECTED" | "NEEDS_REVISION";
         /** SearchRequest */
         SearchRequest: {
             /** Query */
@@ -1242,6 +1524,75 @@ export interface operations {
             };
         };
     };
+    review_queue_api_evidence_review_queue_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+                document_id?: string | null;
+                review_status?: components["schemas"]["ReviewStatus"] | null;
+                risk?: components["schemas"]["EvidenceRisk"] | null;
+                include_archived?: boolean;
+                sort?: "updated_desc" | "updated_asc" | "created_desc" | "created_asc" | "risk_desc" | "risk_asc";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceQueuePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_evidence_item_api_evidence__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceItemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_evidence_item_api_evidence__item_id__patch: {
         parameters: {
             query?: never;
@@ -1277,9 +1628,80 @@ export interface operations {
             };
         };
     };
-    export_evidence_json_api_workspaces__workspace_id__evidence_export_get: {
+    review_evidence_item_api_evidence__item_id__review_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evidence_item_history_api_evidence__item_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewEventRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_evidence_json_api_workspaces__workspace_id__evidence_export_get: {
+        parameters: {
+            query?: {
+                document_id?: string | null;
+                review_status?: components["schemas"]["ReviewStatus"] | null;
+                risk?: components["schemas"]["EvidenceRisk"] | null;
+                include_history?: boolean;
+            };
             header?: never;
             path: {
                 workspace_id: string;
@@ -1310,7 +1732,12 @@ export interface operations {
     };
     export_evidence_markdown_api_workspaces__workspace_id__evidence_export_md_get: {
         parameters: {
-            query?: never;
+            query?: {
+                document_id?: string | null;
+                review_status?: components["schemas"]["ReviewStatus"] | null;
+                risk?: components["schemas"]["EvidenceRisk"] | null;
+                include_history?: boolean;
+            };
             header?: never;
             path: {
                 workspace_id: string;

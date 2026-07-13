@@ -18,6 +18,14 @@ export type EvidenceStatus = components["schemas"]["EvidenceStatus"];
 export type EvidenceRisk = components["schemas"]["EvidenceRisk"];
 export type EvidenceExtractResponse = components["schemas"]["EvidenceExtractResponse"];
 export type EvidenceMapExport = components["schemas"]["EvidenceMapExport"];
+export type EvidenceItemSummary = components["schemas"]["EvidenceItemSummary"];
+export type EvidenceItemDetail = components["schemas"]["EvidenceItemDetail"];
+export type EvidenceQueuePage = components["schemas"]["EvidenceQueuePage"];
+export type ReviewStatus = components["schemas"]["ReviewStatus"];
+export type ReviewEvent = components["schemas"]["ReviewEventRead"];
+export type ReviewRequest = components["schemas"]["ReviewRequest"];
+/** Actions a client may submit; SET_STATUS/EXTRACTION_ARCHIVED are server-recorded. */
+export type SubmittableReviewAction = ReviewRequest["action"];
 
 export interface ApiError {
   code: string;
