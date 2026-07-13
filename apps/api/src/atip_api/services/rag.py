@@ -16,7 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from atip_api.ai import llm
 from atip_api.config import Settings
-from atip_api.errors import AppError, GenerationDisabledError, GenerationFailedError
+from atip_api.errors import (
+    AnswerNotFoundError,
+    AppError,
+    GenerationDisabledError,
+    GenerationFailedError,
+)
 from atip_api.schemas.rag import (
     AnswerVerification,
     AskRequest,
@@ -46,6 +51,10 @@ GENERATION_DISABLED_MESSAGE = (
     "Keyword and hybrid search remain available."
 )
 GENERATION_FAILED_MESSAGE = "The language model request failed. Please try again."
+ANSWER_NOT_FOUND_MESSAGE = (
+    "No verified answer: none of the model's claims could be verified against the "
+    "retrieved sources, so the draft answer was withheld."
+)
 
 
 @dataclass(frozen=True)
@@ -76,7 +85,19 @@ class RAGService:
         except Exception as exc:
             logger.exception("LLM generation failed")
             raise GenerationFailedError(GENERATION_FAILED_MESSAGE) from exc
-        return self._finalize(workspace_id, request, retrieval, "".join(parts))
+        response = self._finalize(workspace_id, request, retrieval, "".join(parts))
+        if response.verification.status == "unsupported":
+            # hallucination guardrail: zero claims survived quote verification
+            logger.warning(
+                "Answer withheld for workspace %s: verification rejected all claims (%s)",
+                workspace_id,
+                "; ".join(response.verification.warnings) or "no warnings",
+            )
+            raise AnswerNotFoundError(
+                ANSWER_NOT_FOUND_MESSAGE,
+                extra={"warnings": response.verification.warnings},
+            )
+        return response
 
     async def stream_events(
         self, workspace_id: uuid.UUID, request: AskRequest
@@ -129,7 +150,18 @@ class RAGService:
                                              message=GENERATION_FAILED_MESSAGE))
             return
 
-        yield ("final", self._finalize(workspace_id, request, retrieval, raw))
+        final = self._finalize(workspace_id, request, retrieval, raw)
+        if final.verification.status == "unsupported":
+            # streamed tokens are the unverified draft; the error tells the
+            # client to discard them instead of presenting unverifiable text
+            logger.warning(
+                "Answer withheld for workspace %s: verification rejected all claims (%s)",
+                workspace_id,
+                "; ".join(final.verification.warnings) or "no warnings",
+            )
+            yield ("error", StreamErrorEvent(code="not_found", message=ANSWER_NOT_FOUND_MESSAGE))
+            return
+        yield ("final", final)
 
     async def _retrieve(self, workspace_id: uuid.UUID, request: AskRequest) -> _Retrieval:
         search = await self._search.search(

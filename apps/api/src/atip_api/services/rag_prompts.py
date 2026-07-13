@@ -28,6 +28,12 @@ exactly as written in the source.
 answer: write one short sentence saying the retrieved sources do not cover the question, \
 and set "not_found": true.
 5. Write concisely in plain text: short paragraphs or dashed lists. No headings, no tables.
+6. Every quote in the claims block must be ONE contiguous span copied character-for-character \
+from its source. Never paraphrase, never merge separate sentences into one quote, never \
+shorten with ellipses, and never "fix" spelling, punctuation, or units inside a quote.
+7. If you cannot find a verbatim quote that supports a statement, remove the statement \
+from your answer instead of citing a weaker source. An answer whose claims all fail \
+verification is withheld from the user entirely.
 
 Output format, exactly:
 <answer text with inline [n] markers>

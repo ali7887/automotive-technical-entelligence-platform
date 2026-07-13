@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from atip_api.db import get_session_factory
 from atip_api.models import Chunk
-from atip_api.services.verification import CLAIMS_SENTINEL, NOT_FOUND_ANSWER
+from atip_api.services.verification import CLAIMS_SENTINEL
 
 from .pdf_utils import pdf_with_text
 
@@ -214,12 +214,14 @@ async def test_ask_with_fabricated_quote_is_not_found(client, monkeypatch):
     )
     _install(monkeypatch, fake)
 
+    # every claim failed quote verification -> the answer is withheld as 404 not_found
     response = await client.post(f"/api/workspaces/{ws_id}/ask", json={"question": _QUESTION})
+    assert response.status_code == 404
     body = response.json()
-    assert body["not_found"] is True
-    assert body["verification"]["status"] == "unsupported"
-    assert body["answer_md"] == NOT_FOUND_ANSWER
-    assert all(citation["status"] == "weak" for citation in body["citations"])
+    assert body["code"] == "not_found"
+    assert body["title"] == "No Verified Answer"
+    assert any("was not found in the chunk text" in warning for warning in body["warnings"])
+    assert body["request_id"]
 
 
 async def test_ask_with_fake_source_index_drops_citation(client, monkeypatch):
@@ -241,12 +243,12 @@ async def test_ask_with_fake_source_index_drops_citation(client, monkeypatch):
     )
     _install(monkeypatch, fake)
 
+    # the only citation points at a nonexistent source -> nothing verifiable -> 404
     response = await client.post(f"/api/workspaces/{ws_id}/ask", json={"question": _QUESTION})
+    assert response.status_code == 404
     body = response.json()
-    assert body["not_found"] is True
-    assert body["citations"] == []
-    assert body["verification"]["citations_dropped"] >= 1
-    assert "[99]" not in body["answer_md"]
+    assert body["code"] == "not_found"
+    assert any("nonexistent source" in warning for warning in body["warnings"])
 
 
 async def test_ask_with_malformed_claims_is_not_found(client, monkeypatch):
@@ -254,12 +256,12 @@ async def test_ask_with_malformed_claims_is_not_found(client, monkeypatch):
     await _upload_ready(client, ws_id, _PHOTO_PAGES, "fmvss108.pdf")
     _install(monkeypatch, FakeLLM(_claims_raw("Hallucinated answer [1]", "{broken json")))
 
+    # unverifiable output (no parsable claims block) is withheld, not presented
     response = await client.post(f"/api/workspaces/{ws_id}/ask", json={"question": _QUESTION})
+    assert response.status_code == 404
     body = response.json()
-    assert body["not_found"] is True
-    assert body["answer_md"] == NOT_FOUND_ANSWER
-    assert body["citations"] == []
-    assert any("could not be verified" in warning for warning in body["verification"]["warnings"])
+    assert body["code"] == "not_found"
+    assert any("could not be verified" in warning for warning in body["warnings"])
 
 
 async def test_ask_unanswerable_question_is_not_found(client, monkeypatch):
@@ -371,6 +373,38 @@ async def test_chat_missing_workspace_streams_error(client, monkeypatch):
     events = _parse_sse(response.text)
     assert events[0][0] == "error"
     assert events[0][1]["code"] == "not_found"
+
+
+async def test_chat_unverified_answer_streams_not_found_error(client, monkeypatch):
+    ws_id = await _create_workspace(client)
+    await _upload_ready(client, ws_id, _PHOTO_PAGES, "fmvss108.pdf")
+    fake = FakeLLM(
+        _claims_raw(
+            "The maximum is 500 candela [1]",
+            json.dumps(
+                {
+                    "not_found": False,
+                    "confidence": 0.9,
+                    "claims": [
+                        {
+                            "text": "max 500 candela",
+                            "citations": [{"source": 1, "quote": "shall not exceed 500 candela"}],
+                        }
+                    ],
+                }
+            ),
+        )
+    )
+    _install(monkeypatch, fake)
+
+    response = await client.get(f"/api/workspaces/{ws_id}/chat", params={"question": _QUESTION})
+    events = _parse_sse(response.text)
+    names = [name for name, _ in events]
+    # draft tokens may have streamed, but the stream must end in a not_found
+    # error (client discards the draft) — never a final with unverified text
+    assert "final" not in names
+    assert events[-1][0] == "error"
+    assert events[-1][1]["code"] == "not_found"
 
 
 async def test_chat_llm_failure_streams_error(client, monkeypatch):

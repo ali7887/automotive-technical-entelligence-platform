@@ -31,9 +31,16 @@ class AppError(Exception):
     code = "internal_error"
     title = "Internal Server Error"
 
-    def __init__(self, message: str, *, headers: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        headers: dict[str, str] | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
         self.message = message
         self.headers = headers
+        self.extra = extra
         super().__init__(message)
 
 
@@ -41,6 +48,14 @@ class NotFoundError(AppError):
     status_code = 404
     code = "not_found"
     title = "Not Found"
+
+
+class AnswerNotFoundError(AppError):
+    """Verification rejected every claim: the unverified draft is withheld."""
+
+    status_code = 404
+    code = "not_found"
+    title = "No Verified Answer"
 
 
 class UnsupportedFileTypeError(AppError):
@@ -159,6 +174,7 @@ async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:
         title=exc.title,
         detail=exc.message,
         headers=exc.headers,
+        extra=exc.extra,
     )
 
 
