@@ -54,10 +54,11 @@ class OpenAIChatClient:
 
 def get_llm_client(settings: Settings) -> LLMClient | None:
     """Return the configured chat client, or None when no API key is set."""
-    if not settings.openai_api_key:
+    api_key = settings.openai_api_key_value
+    if api_key is None:
         return None
     return OpenAIChatClient(
-        api_key=settings.openai_api_key,
+        api_key=api_key,
         model=settings.llm_model,
         base_url=settings.openai_base_url,
         timeout=settings.openai_timeout_seconds,

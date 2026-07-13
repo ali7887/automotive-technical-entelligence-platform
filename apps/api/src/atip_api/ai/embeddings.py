@@ -51,10 +51,11 @@ class OpenAIEmbeddingClient:
 
 def get_embedding_client(settings: Settings) -> EmbeddingClient | None:
     """Return the configured embedding client, or None when no API key is set."""
-    if not settings.openai_api_key:
+    api_key = settings.openai_api_key_value
+    if api_key is None:
         return None
     return OpenAIEmbeddingClient(
-        api_key=settings.openai_api_key,
+        api_key=api_key,
         model=settings.embedding_model,
         dimensions=settings.embedding_dim,
         base_url=settings.openai_base_url,

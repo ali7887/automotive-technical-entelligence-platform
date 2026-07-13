@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from atip_api.config import get_settings
+from atip_api.config import get_app_version, get_settings
 from atip_api.db import get_engine
 from atip_api.errors import (
     AppError,
@@ -47,7 +47,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings)
-    app = FastAPI(title="ATIP API", version="0.1.0", lifespan=lifespan)
+    settings.validate_for_release()
+    if settings.environment == "production" and any(
+        "localhost" in origin or "127.0.0.1" in origin for origin in settings.cors_origin_list
+    ):
+        logger.warning("CORS_ORIGINS includes a loopback origin in production: %s",
+                       settings.cors_origins)
+    app = FastAPI(title="ATIP API", version=get_app_version(), lifespan=lifespan)
     app.state.rate_limiter = SlidingWindowRateLimiter()
     app.add_middleware(
         CORSMiddleware,
