@@ -27,14 +27,22 @@ export type ReviewRequest = components["schemas"]["ReviewRequest"];
 /** Actions a client may submit; SET_STATUS/EXTRACTION_ARCHIVED are server-recorded. */
 export type SubmittableReviewAction = ReviewRequest["action"];
 
+/** RFC 7807 problem details; `code` and `request_id` are ATIP extensions. */
 export interface ApiError {
+  type: string;
+  title: string;
+  status: number;
+  detail: string;
+  instance: string;
   code: string;
-  message: string;
+  request_id: string | null;
 }
 
 export function errorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as ApiError).message);
+  if (error && typeof error === "object") {
+    // HTTP errors are RFC 7807 (`detail`); SSE error events still carry `message`
+    if ("detail" in error && typeof error.detail === "string") return error.detail;
+    if ("message" in error) return String((error as { message: unknown }).message);
   }
   return fallback;
 }

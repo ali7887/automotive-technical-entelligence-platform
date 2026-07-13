@@ -333,7 +333,7 @@ async def test_archived_item_is_read_only(client, monkeypatch):
 
     response = await _review(client, item_id, "START_REVIEW")
     assert response.status_code == 409
-    assert "archived" in response.json()["message"]
+    assert "archived" in response.json()["detail"]
 
 
 # --- export metadata ----------------------------------------------------------

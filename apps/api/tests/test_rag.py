@@ -144,7 +144,7 @@ async def test_ask_without_key_returns_generation_disabled(client):
     assert response.status_code == 503
     body = response.json()
     assert body["code"] == "generation_disabled"
-    assert "OPENAI_API_KEY" in body["message"]
+    assert "OPENAI_API_KEY" in body["detail"]
 
 
 async def test_chat_without_key_streams_error_event(client):

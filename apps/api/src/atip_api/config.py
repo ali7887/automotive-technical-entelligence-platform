@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     storage_dir: Path = Path("storage/uploads")
     max_upload_mb: int = 50
     cors_origins: str = "http://localhost:3000"
+    log_level: str = "INFO"
+    log_json: bool = True
 
     @property
     def cors_origin_list(self) -> list[str]:
