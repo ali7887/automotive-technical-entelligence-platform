@@ -20,7 +20,8 @@ from atip_api.schemas.health import (
 
 router = APIRouter(tags=["health"])
 
-_API_ROOT = Path(__file__).resolve().parents[3]
+# source checkout layout first; the container image ships alembic/ in the workdir
+_ALEMBIC_ROOTS = (Path(__file__).resolve().parents[3], Path.cwd())
 
 
 def _first_line(exc: Exception) -> str:
@@ -28,12 +29,16 @@ def _first_line(exc: Exception) -> str:
 
 
 def _alembic_head() -> str | None:
-    try:
-        config = AlembicConfig(str(_API_ROOT / "alembic.ini"))
-        config.set_main_option("script_location", str(_API_ROOT / "alembic"))
-        return ScriptDirectory.from_config(config).get_current_head()
-    except Exception:
-        return None
+    for root in _ALEMBIC_ROOTS:
+        if not (root / "alembic.ini").is_file():
+            continue
+        try:
+            config = AlembicConfig(str(root / "alembic.ini"))
+            config.set_main_option("script_location", str(root / "alembic"))
+            return ScriptDirectory.from_config(config).get_current_head()
+        except Exception:
+            return None
+    return None
 
 
 async def _check_postgres() -> ServiceStatus:
