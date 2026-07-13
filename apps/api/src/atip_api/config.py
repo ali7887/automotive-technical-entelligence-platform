@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     openai_base_url: str | None = None
     # chat model for verified RAG; generation is disabled entirely without an API key
     llm_model: str = "gpt-4o-mini"
+    # deterministic budgets for downstream calls; retries are handled by tenacity
+    openai_timeout_seconds: float = 60.0
+    qdrant_timeout_seconds: int = 10
     rrf_k: int = 60
     storage_dir: Path = Path("storage/uploads")
     max_upload_mb: int = 50

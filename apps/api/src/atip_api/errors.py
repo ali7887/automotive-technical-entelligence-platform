@@ -191,6 +191,21 @@ async def http_exception_handler(request: Request, exc: Exception) -> JSONRespon
     )
 
 
+async def db_unavailable_handler(request: Request, exc: Exception) -> JSONResponse:
+    # connection-level DB failures (after retries) are transient: advertise 503
+    logger.error(
+        "Database unavailable on %s %s", request.method, request.url.path, exc_info=exc
+    )
+    return problem_response(
+        request,
+        status=503,
+        code="service_unavailable",
+        title="Service Unavailable",
+        detail="The database is temporarily unavailable. Please retry shortly.",
+        headers={"Retry-After": "5"},
+    )
+
+
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     # full traceback stays in the structured log; the client gets a masked 500
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)

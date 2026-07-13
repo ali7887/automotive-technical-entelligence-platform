@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import uuid
 from collections.abc import Sequence
 from typing import Any
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 async def ensure_qdrant_collection(settings: Settings) -> None:
     """Idempotently create the chunk collection so /health can verify dimensions."""
-    client = AsyncQdrantClient(url=settings.qdrant_url)
+    client = AsyncQdrantClient(url=settings.qdrant_url, timeout=settings.qdrant_timeout_seconds)
     try:
         if not await client.collection_exists(settings.qdrant_collection):
             await client.create_collection(
@@ -68,7 +68,7 @@ async def upsert_chunk_vectors(
     """Upsert chunk vectors with stable point ids (= Postgres chunk UUIDs)."""
     if not items:
         return
-    client = AsyncQdrantClient(url=settings.qdrant_url)
+    client = AsyncQdrantClient(url=settings.qdrant_url, timeout=settings.qdrant_timeout_seconds)
     try:
         await client.upsert(
             collection_name=settings.qdrant_collection,
@@ -84,7 +84,7 @@ async def upsert_chunk_vectors(
 async def delete_chunk_vectors(settings: Settings, chunk_ids: Sequence[uuid.UUID]) -> None:
     if not chunk_ids:
         return
-    client = AsyncQdrantClient(url=settings.qdrant_url)
+    client = AsyncQdrantClient(url=settings.qdrant_url, timeout=settings.qdrant_timeout_seconds)
     try:
         await client.delete(
             collection_name=settings.qdrant_collection,
@@ -109,7 +109,7 @@ async def search_chunk_vectors(
         conditions.append(
             FieldCondition(key="document_id", match=MatchValue(value=str(document_id)))
         )
-    client = AsyncQdrantClient(url=settings.qdrant_url)
+    client = AsyncQdrantClient(url=settings.qdrant_url, timeout=settings.qdrant_timeout_seconds)
     try:
         response = await client.query_points(
             collection_name=settings.qdrant_collection,

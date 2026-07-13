@@ -10,6 +10,7 @@ from typing import Protocol
 from openai import AsyncOpenAI
 
 from atip_api.config import Settings
+from atip_api.resilience import openai_retrying
 
 
 class LLMClient(Protocol):
@@ -19,21 +20,33 @@ class LLMClient(Protocol):
 
 
 class OpenAIChatClient:
-    def __init__(self, api_key: str, model: str, base_url: str | None) -> None:
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    def __init__(
+        self, api_key: str, model: str, base_url: str | None, timeout: float
+    ) -> None:
+        # SDK retries disabled: tenacity owns the retry policy
+        self._client = AsyncOpenAI(
+            api_key=api_key, base_url=base_url, timeout=timeout, max_retries=0
+        )
         self._model = model
 
     async def stream(self, *, system: str, user: str) -> AsyncIterator[str]:
-        # temperature 0: verified extraction must be as deterministic as the API allows
-        response = await self._client.chat.completions.create(
-            model=self._model,
-            temperature=0,
-            stream=True,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        )
+        # transient failures are retried only while establishing the stream;
+        # a stream dying mid-flight propagates (a restart could emit duplicates)
+        response = None
+        async for attempt in openai_retrying():
+            with attempt:
+                # temperature 0: verified extraction must be as deterministic
+                # as the API allows
+                response = await self._client.chat.completions.create(
+                    model=self._model,
+                    temperature=0,
+                    stream=True,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                )
+        assert response is not None
         async for event in response:
             if event.choices and (delta := event.choices[0].delta.content):
                 yield delta
@@ -47,4 +60,5 @@ def get_llm_client(settings: Settings) -> LLMClient | None:
         api_key=settings.openai_api_key,
         model=settings.llm_model,
         base_url=settings.openai_base_url,
+        timeout=settings.openai_timeout_seconds,
     )

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from atip_api.config import get_settings
@@ -12,6 +13,7 @@ from atip_api.db import get_engine
 from atip_api.errors import (
     AppError,
     app_error_handler,
+    db_unavailable_handler,
     http_exception_handler,
     unhandled_exception_handler,
     validation_error_handler,
@@ -59,6 +61,8 @@ def create_app() -> FastAPI:
     app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(OperationalError, db_unavailable_handler)
+    app.add_exception_handler(InterfaceError, db_unavailable_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
     app.include_router(health_router)
     app.include_router(workspaces_router)

@@ -120,9 +120,20 @@ async def _index_chunks(session: AsyncSession, document: Document, pages: list[s
             document.id,
         )
         return
-    vectors = await client.embed([chunk.text for chunk in to_embed])
-    await vectorstore.upsert_chunk_vectors(settings, list(zip(to_embed, vectors, strict=True)))
-    await repo.mark_embedded([chunk.id for chunk in to_embed], datetime.now(UTC))
+    try:
+        vectors = await client.embed([chunk.text for chunk in to_embed])
+        await vectorstore.upsert_chunk_vectors(settings, list(zip(to_embed, vectors, strict=True)))
+        await repo.mark_embedded([chunk.id for chunk in to_embed], datetime.now(UTC))
+    except Exception:
+        # embedding/Qdrant outage must not fail ingestion: chunks are stored,
+        # keyword search works, and unembedded chunks are picked up on reprocess
+        logger.warning(
+            "Embedding failed for %d chunks of document %s; document stays searchable "
+            "keyword-only until reprocessed",
+            len(to_embed),
+            document.id,
+            exc_info=True,
+        )
 
 
 async def process_document(document_id: uuid.UUID, job_id: uuid.UUID) -> None:
