@@ -43,3 +43,22 @@ Acceptance:
   the quoted text
 - extracted evidence items map to real chunks; fabricated quotes are dropped
   and surfaced as warnings (verified live with a stub LLM)
+
+## Phase 5 — Review Workflow & Audit Trail (Done — see PHASE_5_HANDOFF.md)
+- review workflow on evidence items: NEW/IN_REVIEW/APPROVED/REJECTED/
+  NEEDS_REVISION with an explicit server-side state machine (invalid
+  transitions → 409, nothing written)
+- append-only `evidence_review_events` audit table; every mutation (workflow
+  actions, inline status/risk edits, system archival) appends exactly one event
+- re-extraction lifecycle: unreviewed items are replaced; items with review
+  state or history are archived (citations + audit trail preserved), never
+  silently deleted
+- Review Queue UI: filters (review status, risk, archived), sorting,
+  pagination, detail drawer with citations, state-aware actions, and a
+  history timeline
+- exports carry review metadata and optionally the full per-item history
+Acceptance:
+- every review decision is traceable: who, what, when, from→to status
+- rejected transitions write nothing; audit history is strictly append-only
+- re-extraction never destroys reviewed evidence (verified by integration
+  tests and a live smoke test)
