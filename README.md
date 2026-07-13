@@ -41,6 +41,9 @@ pnpm dev
 - `scripts/prod_smoke_test.sh <BASE_URL> [EXPECTED_BUILD_SHA]` — standalone post-deploy
   health + build-identity check (bash + curl only)
 - `docker build -t atip-api apps/api` — production API image
+- `docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=<url> -t atip-web .` — production web image
+- `scripts/ops/deploy.sh` — full single-VPS release (build, migrate, roll, smoke); stack in
+  `docker/docker-compose.prod.yml`, runbook in `docs/14_PRODUCTION_DEPLOYMENT.md`
 
 CI (`.github/workflows/ci.yml`) runs exactly these: ruff + pyright + migration
 round-trip + pytest + E2E smoke for the API, and eslint + tsc + `next build` for the web.

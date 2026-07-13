@@ -1,6 +1,10 @@
 # Release Runbook
 
-Operational guide for deploying, verifying, and rolling back ATIP.
+Operational guide for deploying, verifying, and rolling back ATIP —
+release semantics that hold on any platform. The concrete single-VPS
+deployment (compose stack, reverse proxy/TLS, backups, log shipping) has its
+own runbooks: `docs/14_PRODUCTION_DEPLOYMENT.md`,
+`docs/15_BACKUP_AND_RECOVERY.md`, `docs/16_OBSERVABILITY.md`.
 Configuration reference: `.env.example` (every variable, purpose, and
 production requirements); provisioning checklist with sources and secret
 levels: `docs/13_PROVISIONING_CHECKLIST.md`. Dev setup: `README.md`.

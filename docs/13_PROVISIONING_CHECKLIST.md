@@ -43,6 +43,27 @@ internal hostnames). **Public** = safe in plain config and build logs.
 | `RATE_LIMIT_EXTRACT_PER_MINUTE` | Backend (tuning) | Default 10 — per process; multiply by container count | Public |
 | `NEXT_PUBLIC_API_URL` | Web (**build time**) | Public HTTPS URL of the deployed API. Baked into the bundle — changing it requires a web rebuild | Public |
 
+## Where values live on the VPS (compose stack)
+
+The production compose stack (`docs/14_PRODUCTION_DEPLOYMENT.md`) splits the
+table above across two untracked files under `docker/`:
+
+- **`.env.production`** — everything Public/Sensitive: domain, image tags,
+  service URLs (which use compose service names: `redis://redis:6379/0`,
+  `http://qdrant:6333`), tuning, CORS. Copy from `.env.production.example`.
+- **`.env.secrets`** — Secrets only: `POSTGRES_USER`/`POSTGRES_PASSWORD`/
+  `POSTGRES_DB`, `DATABASE_URL`, `OPENAI_API_KEY`. Copy from
+  `.env.secrets.example`, then `chmod 600`. Both files are gitignored.
+
+Recommendations for a single VPS: generate the DB password with
+`openssl rand -hex 24`; the two env files are the secret store — keep them
+out of shell history (edit with an editor, don't `echo` values), restrict to
+the deploy user, and remember they are **not** in backups (by design) — keep
+an encrypted copy (e.g. in your password manager) or the restore procedure
+stalls on missing credentials. If the host later grows real secret
+management (Vault, SOPS, cloud secret manager), these two files are the
+integration seam: render them at deploy time, change nothing else.
+
 ## Verifying an environment without leaking values
 
 ### 1. Schema + safety validation (authoritative)
