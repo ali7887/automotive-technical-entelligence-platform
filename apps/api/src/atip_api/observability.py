@@ -9,7 +9,7 @@ import json
 import logging
 import sys
 import uuid
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from datetime import UTC, datetime
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -25,6 +25,15 @@ _MAX_INCOMING_ID_LEN = 64
 
 def get_request_id() -> str | None:
     return _request_id.get()
+
+
+def set_request_id(request_id: str | None) -> Token[str | None]:
+    """Bind a correlation id outside the HTTP middleware (queue worker tasks)."""
+    return _request_id.set(request_id)
+
+
+def reset_request_id(token: Token[str | None]) -> None:
+    _request_id.reset(token)
 
 
 class CorrelationIdMiddleware:
@@ -71,6 +80,10 @@ class JsonLogFormatter(logging.Formatter):
         request_id = get_request_id()
         if request_id is not None:
             entry["request_id"] = request_id
+        # opt-in structured field used by auth-failure logs (`extra={"client_ip": …}`)
+        client_ip = getattr(record, "client_ip", None)
+        if client_ip is not None:
+            entry["client_ip"] = client_ip
         if record.exc_info:
             entry["exc_info"] = self.formatException(record.exc_info)
         return json.dumps(entry, default=str, ensure_ascii=False)

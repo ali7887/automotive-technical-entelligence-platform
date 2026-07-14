@@ -46,10 +46,26 @@ class Settings(BaseSettings):
     rerank_api_key: SecretStr | None = None
     rerank_timeout_seconds: float = Field(default=10.0, gt=0)
     rerank_candidates: int = Field(default=30, ge=1, le=100)
+    # async ingestion queue: when enabled, uploads are processed by the arq
+    # worker container; when disabled (dev/test default) or when enqueueing
+    # fails, processing falls back to an in-process background task
+    queue_enabled: bool = False
+    job_timeout_seconds: int = Field(default=900, ge=1)
+    job_max_tries: int = Field(default=3, ge=1)
+    # PENDING/PROCESSING jobs older than this are failed lazily on read so a
+    # crashed worker can never leave a job hanging forever
+    job_stale_after_seconds: int = Field(default=1800, ge=60)
     storage_dir: Path = Path("storage/uploads")
     max_upload_mb: int = Field(default=50, ge=1)
     max_pdf_pages: int = Field(default=2000, ge=1)
     cors_origins: str = "http://localhost:3000"
+    # cookie sessions (opaque tokens, revocable server-side)
+    session_cookie_name: str = "atip_session"
+    session_ttl_hours: int = Field(default=336, ge=1)  # 14 days
+    # None -> Secure flag follows the environment (on in production).
+    # Override only for TLS-terminating local setups.
+    session_cookie_secure: bool | None = None
+    rate_limit_login_per_minute: int = Field(default=10, ge=1)
     log_level: str = "INFO"
     log_json: bool = True
     # per-client per-minute limits on resource-heavy endpoints
@@ -77,6 +93,12 @@ class Settings(BaseSettings):
         if self.rerank_api_key is None:
             return None
         return self.rerank_api_key.get_secret_value() or None
+
+    @property
+    def session_cookie_secure_effective(self) -> bool:
+        if self.session_cookie_secure is not None:
+            return self.session_cookie_secure
+        return self.environment == "production"
 
     def validate_for_release(self) -> None:
         """Fail fast on configuration that is unambiguously wrong in production.

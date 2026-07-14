@@ -24,6 +24,10 @@ class JobRead(BaseModel):
     id: uuid.UUID
     document_id: uuid.UUID
     status: JobStatus
+    # progress: queued -> extracting -> vectorizing -> ready | failed
+    stage: str | None
+    attempts: int
+    request_id: str | None
     error_message: str | None
     updated_at: datetime
 

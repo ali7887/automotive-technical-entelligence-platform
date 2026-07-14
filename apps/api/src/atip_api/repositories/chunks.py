@@ -6,7 +6,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from atip_api.models import Chunk
+from atip_api.models import Chunk, Document, DocumentStatus
 
 
 class ChunkRepository:
@@ -52,12 +52,20 @@ class ChunkRepository:
         document_id: uuid.UUID | None,
         limit: int,
     ) -> list[tuple[Chunk, float]]:
-        """Keyword leg: Postgres FTS ranked by ts_rank_cd, deterministic tiebreak on id."""
+        """Keyword leg: Postgres FTS ranked by ts_rank_cd, deterministic tiebreak on id.
+
+        Only chunks of READY documents match: mid-(re)processing documents are
+        not searchable until their run completes."""
         tsquery = func.websearch_to_tsquery("english", query)
         rank = func.ts_rank_cd(Chunk.text_search, tsquery).label("rank")
         stmt = (
             select(Chunk, rank)
-            .where(Chunk.workspace_id == workspace_id, Chunk.text_search.op("@@")(tsquery))
+            .join(Document, Chunk.document_id == Document.id)
+            .where(
+                Chunk.workspace_id == workspace_id,
+                Document.status == DocumentStatus.READY,
+                Chunk.text_search.op("@@")(tsquery),
+            )
             .order_by(rank.desc(), Chunk.id.asc())
             .limit(limit)
         )

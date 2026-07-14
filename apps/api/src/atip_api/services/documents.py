@@ -1,4 +1,6 @@
+import logging
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import anyio.to_thread
@@ -7,10 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from atip_api.config import Settings
 from atip_api.errors import FileTooLargeError, NotFoundError, UnsupportedFileTypeError
-from atip_api.models import Document, ProcessingJob
+from atip_api.models import Document, DocumentStatus, JobStatus, ProcessingJob
+from atip_api.observability import get_request_id
 from atip_api.processing.pdf_checks import precheck_pdf
+from atip_api.processing.pipeline import STAGE_FAILED, STAGE_QUEUED
 from atip_api.repositories.documents import DocumentRepository
 from atip_api.repositories.workspaces import WorkspaceRepository
+
+logger = logging.getLogger(__name__)
 
 _UPLOAD_CHUNK_SIZE = 1024 * 1024
 
@@ -64,7 +70,13 @@ class DocumentService:
                 storage_path=str(target),
             )
         )
-        job = await self._repo.add_job(ProcessingJob(document_id=document.id))
+        job = await self._repo.add_job(
+            ProcessingJob(
+                document_id=document.id,
+                stage=STAGE_QUEUED,
+                request_id=get_request_id(),
+            )
+        )
         await self._session.commit()
         return document, job
 
@@ -86,6 +98,38 @@ class DocumentService:
         if job is None:
             raise NotFoundError(f"Processing job {job_id} not found")
         return job
+
+    async def reconcile_stale_job(self, job: ProcessingJob) -> None:
+        """Fail a job that no worker will ever finish (crash without retry).
+
+        Lazy on read: no scheduler needed, and a job can never hang forever
+        from the client's point of view — polling is what detects the loss.
+        """
+        if job.status not in (JobStatus.PENDING, JobStatus.PROCESSING):
+            return
+        stale_after = self._settings.job_stale_after_seconds
+        age = (datetime.now(UTC) - job.updated_at).total_seconds()
+        if age <= stale_after:
+            return
+        logger.warning(
+            "Job %s stale for %.0fs (> %ds); marking FAILED", job.id, age, stale_after
+        )
+        job.status = JobStatus.FAILED
+        job.stage = STAGE_FAILED
+        job.error_message = (
+            f"Processing did not finish within {stale_after}s "
+            "(worker crashed or unavailable). Re-upload the document to retry."
+        )
+        document = await self._repo.get_document(job.document_id)
+        if document is not None and document.status in (
+            DocumentStatus.PENDING,
+            DocumentStatus.PROCESSING,
+        ):
+            document.status = DocumentStatus.FAILED
+        await self._session.commit()
+        # updated_at is server-generated onupdate: reload it eagerly so the
+        # response serializer never triggers lazy IO
+        await self._session.refresh(job)
 
     async def list_documents(self, workspace_id: uuid.UUID) -> list[Document]:
         if await self._workspaces.get(workspace_id) is None:

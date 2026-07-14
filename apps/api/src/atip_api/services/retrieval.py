@@ -9,7 +9,7 @@ from atip_api import vectorstore
 from atip_api.ai import embeddings, rerank
 from atip_api.config import Settings
 from atip_api.errors import NotFoundError
-from atip_api.models import Chunk
+from atip_api.models import Chunk, DocumentStatus
 from atip_api.repositories.chunks import ChunkRepository
 from atip_api.repositories.workspaces import WorkspaceRepository
 from atip_api.schemas.search import SearchRequest, SearchResponse, SearchResult, SearchScores
@@ -67,7 +67,13 @@ class SearchService:
             else request.top_k
         )
         candidate_ids = ranked_ids[:candidate_count]
-        chunks_by_id = {chunk.id: chunk for chunk in await self._chunks.get_by_ids(candidate_ids)}
+        # gate on document readiness here too: it covers the semantic leg, whose
+        # Qdrant hits may reference documents that are mid-(re)processing
+        chunks_by_id = {
+            chunk.id: chunk
+            for chunk in await self._chunks.get_by_ids(candidate_ids)
+            if chunk.document.status == DocumentStatus.READY
+        }
         candidate_ids = [cid for cid in candidate_ids if cid in chunks_by_id]
 
         rerank_rank, rerank_score, rerank_used = await self._rerank_leg(
