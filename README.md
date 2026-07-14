@@ -167,5 +167,4 @@ commits; keep changes small and reviewable.
 
 ## License
 
-No license has been selected yet. All rights reserved until a `LICENSE` file
-is added.
+This project is licensed under the MIT License — see [LICENSE](LICENSE).
