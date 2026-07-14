@@ -72,6 +72,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Login */
+        post: operations["login_api_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description Revoke the presented session (idempotent: no error without one).
+         */
+        post: operations["logout_api_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Me */
+        get: operations["me_api_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces": {
         parameters: {
             query?: never;
@@ -79,10 +133,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Workspaces */
+        /**
+         * List Workspaces
+         * @description Only workspaces the caller can read: their memberships, or all
+         *     organization workspaces for org admins.
+         */
         get: operations["list_workspaces_api_workspaces_get"];
         put?: never;
-        /** Create Workspace */
+        /**
+         * Create Workspace
+         * @description Creates the workspace in the caller's organization; the caller becomes
+         *     a workspace editor.
+         */
         post: operations["create_workspace_api_workspaces_post"];
         delete?: never;
         options?: never;
@@ -119,7 +181,12 @@ export interface paths {
         /** List Documents */
         get: operations["list_documents_api_workspaces__workspace_id__documents_get"];
         put?: never;
-        /** Upload Document */
+        /**
+         * Upload Document
+         * @description Accepts the file, records a PENDING job, and hands processing to the
+         *     queue worker (202: poll GET /api/jobs/{job_id} for progress). If the queue
+         *     is disabled or unreachable, processing falls back to an in-process task.
+         */
         post: operations["upload_document_api_workspaces__workspace_id__documents_post"];
         delete?: never;
         options?: never;
@@ -229,8 +296,10 @@ export interface paths {
          * Chat Workspace
          * @description Verified RAG over SSE: `sources`, then `token`*, then `final` — or `error`.
          *
-         *     Streamed tokens are the unverified draft; the `final` event carries the
-         *     verified answer and citations and must replace the streamed text.
+         *     Auth: EventSource sends the session cookie same-origin, so this GET is
+         *     protected exactly like the JSON routes. Streamed tokens are the unverified
+         *     draft; the `final` event carries the verified answer and citations and
+         *     must replace the streamed text.
          */
         get: operations["chat_workspace_api_workspaces__workspace_id__chat_get"];
         put?: never;
@@ -289,6 +358,10 @@ export interface paths {
         /**
          * Review Queue
          * @description Paginated review queue; archived items are excluded unless requested.
+         *
+         *     Tenant isolation: with a workspace_id the caller must be able to read that
+         *     workspace; without one, results are restricted to the caller's readable
+         *     workspaces.
          */
         get: operations["review_queue_api_evidence_review_queue_get"];
         put?: never;
@@ -836,6 +909,12 @@ export interface components {
              */
             document_id: string;
             status: components["schemas"]["JobStatus"];
+            /** Stage */
+            stage: string | null;
+            /** Attempts */
+            attempts: number;
+            /** Request Id */
+            request_id: string | null;
             /** Error Message */
             error_message: string | null;
             /**
@@ -865,6 +944,23 @@ export interface components {
             environment: string;
             /** Build Sha */
             build_sha?: string | null;
+        };
+        /** LoginRequest */
+        LoginRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+        };
+        /** OrganizationRead */
+        OrganizationRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /**
          * ReadinessResponse
@@ -1003,6 +1099,11 @@ export interface components {
             top_k: number;
             /** Semantic Used */
             semantic_used: boolean;
+            /**
+             * Rerank Used
+             * @default false
+             */
+            rerank_used: boolean;
             /** Results */
             results: components["schemas"]["SearchResult"][];
         };
@@ -1037,6 +1138,8 @@ export interface components {
             clause_id: string | null;
             /** Heading */
             heading: string | null;
+            /** Section Path */
+            section_path?: string | null;
             /** Text */
             text: string;
             scores: components["schemas"]["SearchScores"];
@@ -1056,6 +1159,10 @@ export interface components {
             semantic_rank?: number | null;
             /** Semantic Score */
             semantic_score?: number | null;
+            /** Rerank Rank */
+            rerank_rank?: number | null;
+            /** Rerank Score */
+            rerank_score?: number | null;
         };
         /** ServiceStatus */
         ServiceStatus: {
@@ -1067,6 +1174,26 @@ export interface components {
             /** Detail */
             detail?: string | null;
         };
+        /** UserRead */
+        UserRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Email */
+            email: string;
+            /** Display Name */
+            display_name: string;
+            role: components["schemas"]["UserRole"];
+            organization: components["schemas"]["OrganizationRead"];
+        };
+        /**
+         * UserRole
+         * @description Account-level role. Workspace-level rights live on WorkspaceMember.
+         * @enum {string}
+         */
+        UserRole: "PLATFORM_ADMIN" | "ORG_ADMIN" | "MEMBER";
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1188,6 +1315,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadinessResponse"];
+                };
+            };
+        };
+    };
+    login_api_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    me_api_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
                 };
             };
         };
@@ -1387,7 +1585,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

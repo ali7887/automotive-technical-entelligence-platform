@@ -174,7 +174,9 @@ function ExchangeAnswer({ exchange }: { exchange: Exchange }) {
           <CircleAlert className="size-4 text-destructive" />
           {exchange.errorCode === "generation_disabled"
             ? "Answer generation is disabled"
-            : "Could not answer"}
+            : exchange.errorCode === "not_found"
+              ? "No verified answer"
+              : "Could not answer"}
         </p>
         <p className="mt-1 text-muted-foreground">{exchange.error}</p>
       </div>

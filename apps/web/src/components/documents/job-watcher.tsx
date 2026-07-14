@@ -7,7 +7,14 @@ import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { useUploadTracker } from "@/lib/store";
 
-/** Polls one processing job until it settles, then toasts the outcome. */
+// job.stage values from the API (queued -> extracting -> vectorizing -> ready/failed)
+const STAGE_LABELS: Record<string, string> = {
+  queued: "Queued for processing…",
+  extracting: "Extracting text…",
+  vectorizing: "Vectorizing…",
+};
+
+/** Polls one processing job, showing per-stage progress until it settles. */
 function JobWatcher({
   documentId,
   jobId,
@@ -37,16 +44,18 @@ function JobWatcher({
 
   useEffect(() => {
     if (!job) return;
+    // one sticky toast per job (id = jobId) that advances through the stages
     if (job.status === "READY") {
-      toast.success("Document processed and ready");
+      toast.success("Document processed and ready", { id: jobId });
     } else if (job.status === "FAILED") {
-      toast.error(job.error_message ?? "Document processing failed");
+      toast.error(job.error_message ?? "Document processing failed", { id: jobId });
     } else {
+      toast.loading(STAGE_LABELS[job.stage ?? ""] ?? "Processing…", { id: jobId });
       return;
     }
     untrackJob(documentId);
     queryClient.invalidateQueries({ queryKey: ["documents", workspaceId] });
-  }, [job, documentId, workspaceId, queryClient, untrackJob]);
+  }, [job, jobId, documentId, workspaceId, queryClient, untrackJob]);
 
   return null;
 }

@@ -31,7 +31,8 @@ export function UploadButton({ workspaceId }: { workspaceId: string }) {
       return data;
     },
     onSuccess: ({ document, job }) => {
-      toast.info(`Processing “${document.name}”…`);
+      // 202 Accepted: the JobWatcher advances this toast through the stages
+      toast.loading(`Processing “${document.name}”…`, { id: job.id });
       trackJob(document.id, job.id);
       queryClient.invalidateQueries({ queryKey: ["documents", workspaceId] });
     },

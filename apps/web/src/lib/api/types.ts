@@ -1,5 +1,6 @@
 import type { components } from "./schema";
 
+export type User = components["schemas"]["UserRead"];
 export type Workspace = components["schemas"]["WorkspaceRead"];
 export type Document = components["schemas"]["DocumentRead"];
 export type ProcessingJob = components["schemas"]["JobRead"];

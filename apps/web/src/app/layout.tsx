@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 
+import { UserMenu } from "@/components/auth/user-menu";
 import { HealthStatus } from "@/components/health-status";
 
 import { Providers } from "./providers";
@@ -42,7 +43,10 @@ export default function RootLayout({
                   Automotive Technical Intelligence Platform
                 </span>
               </Link>
-              <HealthStatus />
+              <div className="flex items-center gap-4">
+                <HealthStatus />
+                <UserMenu />
+              </div>
             </div>
           </header>
           <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>

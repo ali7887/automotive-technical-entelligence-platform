@@ -72,7 +72,12 @@ export function openChatStream(
   args: { workspaceId: string; question: string; documentId?: string },
   handlers: ChatStreamHandlers,
 ): () => void {
-  const url = new URL(`/api/workspaces/${args.workspaceId}/chat`, API_BASE_URL);
+  // API_BASE_URL is "" for the same-origin setup; EventSource then resolves
+  // against the page origin and sends the session cookie automatically
+  const url = new URL(
+    `/api/workspaces/${args.workspaceId}/chat`,
+    API_BASE_URL || window.location.origin,
+  );
   url.searchParams.set("question", args.question);
   if (args.documentId) url.searchParams.set("document_id", args.documentId);
 
