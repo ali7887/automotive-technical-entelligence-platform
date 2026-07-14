@@ -83,7 +83,7 @@ async def test_upload_to_ready_to_keyword_search(client: httpx.AsyncClient, work
         ]
     )
     upload = await _upload(client, workspace["id"], "e2e-regulation.pdf", pdf)
-    assert upload.status_code == 201, upload.text
+    assert upload.status_code == 202, upload.text
     document = upload.json()["document"]
 
     deadline = time.monotonic() + _READY_TIMEOUT_SECONDS

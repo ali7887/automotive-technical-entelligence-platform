@@ -74,7 +74,11 @@ jobs:
       - name: E2E release smoke (live server)
         env:
           BUILD_SHA: ${{ github.sha }}
+          ATIP_BOOTSTRAP_PASSWORD: e2e-smoke-password
         run: |
+          # all routes but /health need auth now: provision the smoke account
+          uv run python -m atip_api.cli create-user \
+            --email e2e@atip.local --org "E2E Smoke" --role org_admin
           uv run uvicorn atip_api.main:app --host 127.0.0.1 --port 8000 > uvicorn.log 2>&1 &
           for _ in $(seq 1 30); do
             curl -sf http://127.0.0.1:8000/health/live > /dev/null && break
