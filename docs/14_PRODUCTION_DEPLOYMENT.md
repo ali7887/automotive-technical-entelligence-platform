@@ -16,8 +16,12 @@ internet ──► caddy :80/:443  (only container with published ports)
 
 internal network (internal: true — no host ports, no internet egress):
   api ──► postgres:5432   (system of record; pgvector)
-  api ──► redis:6379      (health check only; no persistence — deliberate)
+  api ──► redis:6379      (ingestion queue + health; still no persistence —
+                           in-flight queue entries die with redis, and the api
+                           fails such jobs lazily after JOB_STALE_AFTER_SECONDS)
   api ──► qdrant:6333     (vectors; derivable from postgres)
+  worker ◄─ redis         (arq consumer: PDF extract/chunk/embed/index;
+                           same image + env as api; edge+internal like api)
   vector ─(docker socket)─► all container logs ──► file archive (+ Loki overlay)
 ```
 
@@ -33,6 +37,12 @@ internal network (internal: true — no host ports, no internet egress):
 - uvicorn runs with `--proxy-headers` so the per-IP rate limiter and access
   logs see real client IPs (Caddy sets `X-Forwarded-For`). Safe because the
   api port is never published.
+- Authentication is cookie sessions (HttpOnly, Secure, SameSite=Strict).
+  There is no public signup: after the first deploy, bootstrap the first
+  account once —
+  `ATIP_BOOTSTRAP_PASSWORD=… scripts/ops/compose.sh run --rm api
+  python -m atip_api.cli create-user --email you@co.com --org "Your Org"
+  --role org_admin`.
 
 ## 1. Server prerequisites
 

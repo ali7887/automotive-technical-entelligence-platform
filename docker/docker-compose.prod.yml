@@ -84,6 +84,36 @@ services:
     networks: [edge]
     # NEXT_PUBLIC_API_URL is baked in at image build time — no runtime env
 
+  # Async ingestion worker (arq). Same image and env as the api; consumes
+  # document-processing jobs from redis (QUEUE_ENABLED=true in .env.production
+  # is what makes the api enqueue instead of processing in-process). Needs the
+  # uploads volume (reads the PDFs) and edge for OpenAI embedding calls.
+  worker:
+    image: atip-api:${ATIP_TAG:?set ATIP_TAG in docker/.env.production}
+    restart: unless-stopped
+    command: ["arq", "atip_api.worker.WorkerSettings"]
+    env_file:
+      - .env.production
+      - .env.secrets
+    volumes:
+      - uploads_data:/data/uploads
+    networks: [edge, internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    # the image's baked-in healthcheck probes HTTP /health/live, which a
+    # worker doesn't serve — use arq's redis-backed liveness check instead
+    healthcheck:
+      test: ["CMD", "arq", "--check", "atip_api.worker.WorkerSettings"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
   # One-shot: scripts/ops/compose.sh run --rm migrate
   # Runs once per release BEFORE rolling the api (never per-container).
   migrate:
