@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atip_api.auth import WorkspaceViewerDep
 from atip_api.config import get_settings
 from atip_api.db import get_session
 from atip_api.ratelimit import rate_limited
@@ -32,10 +33,10 @@ ServiceDep = Annotated[RAGService, Depends(get_rag_service)]
     "/workspaces/{workspace_id}/ask", response_model=AskResponse, dependencies=[_ASK_LIMIT]
 )
 async def ask_workspace(
-    workspace_id: uuid.UUID, request: AskRequest, service: ServiceDep
+    access: WorkspaceViewerDep, request: AskRequest, service: ServiceDep
 ) -> AskResponse:
     """Verified RAG: hybrid retrieval + LLM answer checked against the retrieved chunks."""
-    return await service.ask(workspace_id, request)
+    return await service.ask(access.workspace.id, request)
 
 
 def _sse(event: str, payload: BaseModel) -> str:
@@ -52,7 +53,7 @@ async def _sse_stream(
 
 @router.get("/workspaces/{workspace_id}/chat", dependencies=[_ASK_LIMIT])
 async def chat_workspace(
-    workspace_id: uuid.UUID,
+    access: WorkspaceViewerDep,
     service: ServiceDep,
     question: Annotated[str, Query(min_length=1, max_length=500)],
     document_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -60,12 +61,14 @@ async def chat_workspace(
 ) -> StreamingResponse:
     """Verified RAG over SSE: `sources`, then `token`*, then `final` — or `error`.
 
-    Streamed tokens are the unverified draft; the `final` event carries the
-    verified answer and citations and must replace the streamed text.
+    Auth: EventSource sends the session cookie same-origin, so this GET is
+    protected exactly like the JSON routes. Streamed tokens are the unverified
+    draft; the `final` event carries the verified answer and citations and
+    must replace the streamed text.
     """
     request = AskRequest(question=question, document_id=document_id, top_k=top_k)
     return StreamingResponse(
-        _sse_stream(service, workspace_id, request),
+        _sse_stream(service, access.workspace.id, request),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

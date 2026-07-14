@@ -19,7 +19,9 @@ from atip_api.errors import (
     validation_error_handler,
 )
 from atip_api.observability import CorrelationIdMiddleware, configure_logging
+from atip_api.queue import close_pool
 from atip_api.ratelimit import SlidingWindowRateLimiter
+from atip_api.routers.auth import router as auth_router
 from atip_api.routers.documents import router as documents_router
 from atip_api.routers.evidence import router as evidence_router
 from atip_api.routers.health import router as health_router
@@ -41,6 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Startup must not depend on Qdrant; /health surfaces the failure.
         logger.warning("Could not ensure Qdrant collection at startup", exc_info=True)
     yield
+    await close_pool()
     await get_engine().dispose()
 
 
@@ -71,6 +74,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(InterfaceError, db_unavailable_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
     app.include_router(health_router)
+    app.include_router(auth_router)
     app.include_router(workspaces_router)
     app.include_router(documents_router)
     app.include_router(search_router)

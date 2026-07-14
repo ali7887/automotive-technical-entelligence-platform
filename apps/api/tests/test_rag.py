@@ -111,7 +111,7 @@ async def _upload_ready(client, ws_id: str, pages: list[str], name: str) -> str:
         f"/api/workspaces/{ws_id}/documents",
         files={"file": (name, pdf_with_text(pages), "application/pdf")},
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
     doc_id = response.json()["document"]["id"]
     assert (await client.get(f"/api/documents/{doc_id}")).json()["status"] == "READY"
     return doc_id
@@ -364,15 +364,14 @@ async def test_chat_scopes_sources_to_document(client, monkeypatch):
     assert sources and all(source["document_id"] == brake_doc for source in sources)
 
 
-async def test_chat_missing_workspace_streams_error(client, monkeypatch):
+async def test_chat_missing_workspace_returns_404(client, monkeypatch):
+    # the workspace guard now rejects before the stream opens: RFC 7807, not SSE
     _install(monkeypatch, CitingFakeLLM(_PHOTO_QUOTE))
     response = await client.get(
         f"/api/workspaces/{uuid.uuid4()}/chat", params={"question": _QUESTION}
     )
-    assert response.status_code == 200
-    events = _parse_sse(response.text)
-    assert events[0][0] == "error"
-    assert events[0][1]["code"] == "not_found"
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
 
 
 async def test_chat_unverified_answer_streams_not_found_error(client, monkeypatch):

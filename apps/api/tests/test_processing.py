@@ -33,7 +33,7 @@ async def _upload(client, ws_id: str, pages: list[str]) -> dict:
         f"/api/workspaces/{ws_id}/documents",
         files={"file": ("fmvss108.pdf", pdf_with_text(pages), "application/pdf")},
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
     return response.json()
 
 

@@ -69,7 +69,8 @@ async def test_http_client_sends_standard_payload_and_parses_results():
 async def test_http_client_drops_out_of_range_indices():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
-            200, json={"results": [{"index": 7, "relevance_score": 0.9}, {"index": 0, "score": 0.5}]}
+            200,
+            json={"results": [{"index": 7, "relevance_score": 0.9}, {"index": 0, "score": 0.5}]},
         )
 
     client = HttpRerankClient(

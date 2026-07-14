@@ -147,7 +147,7 @@ async def test_search_falls_back_to_keyword_when_embeddings_are_down(client, mon
         f"/api/workspaces/{ws_id}/documents",
         files={"file": ("r.pdf", pdf_with_text([page]), "application/pdf")},
     )
-    assert upload.status_code == 201
+    assert upload.status_code == 202
 
     response = await client.post(
         f"/api/workspaces/{ws_id}/search", json={"query": "photometric requirements"}

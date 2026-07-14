@@ -14,6 +14,7 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -403,9 +404,11 @@ class EvidenceService:
         sort: QueueSort,
         limit: int,
         offset: int,
+        workspace_ids: Sequence[uuid.UUID] | None = None,
     ) -> EvidenceQueuePage:
         rows, total = await self._repo.query_queue(
             workspace_id=workspace_id,
+            workspace_ids=workspace_ids,
             document_id=document_id,
             review_status=review_status,
             risk=risk,

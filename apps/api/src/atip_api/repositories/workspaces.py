@@ -11,8 +11,8 @@ class WorkspaceRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def create(self, name: str) -> Workspace:
-        workspace = Workspace(name=name)
+    async def create(self, name: str, organization_id: uuid.UUID) -> Workspace:
+        workspace = Workspace(name=name, organization_id=organization_id)
         self._session.add(workspace)
         await self._session.flush()
         return workspace

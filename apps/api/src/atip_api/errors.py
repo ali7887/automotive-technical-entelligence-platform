@@ -50,6 +50,24 @@ class NotFoundError(AppError):
     title = "Not Found"
 
 
+class AuthenticationRequiredError(AppError):
+    status_code = 401
+    code = "authentication_required"
+    title = "Authentication Required"
+
+
+class InvalidCredentialsError(AppError):
+    status_code = 401
+    code = "invalid_credentials"
+    title = "Invalid Credentials"
+
+
+class ForbiddenError(AppError):
+    status_code = 403
+    code = "forbidden"
+    title = "Forbidden"
+
+
 class AnswerNotFoundError(AppError):
     """Verification rejected every claim: the unverified draft is withheld."""
 

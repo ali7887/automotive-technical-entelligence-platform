@@ -76,7 +76,7 @@ async def _upload_ready(client, ws_id: str, pages: list[str], name: str) -> str:
         f"/api/workspaces/{ws_id}/documents",
         files={"file": (name, pdf_with_text(pages), "application/pdf")},
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
     doc_id = response.json()["document"]["id"]
     assert (await client.get(f"/api/documents/{doc_id}")).json()["status"] == "READY"
     return doc_id

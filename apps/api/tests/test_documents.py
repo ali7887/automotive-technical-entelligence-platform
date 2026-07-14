@@ -21,7 +21,7 @@ async def test_upload_and_process_pdf(client):
         f"/api/workspaces/{ws_id}/documents",
         files={"file": ("r155.pdf", _pdf_bytes(pages=3), "application/pdf")},
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
     payload = response.json()
     assert payload["document"]["status"] == "PENDING"
 

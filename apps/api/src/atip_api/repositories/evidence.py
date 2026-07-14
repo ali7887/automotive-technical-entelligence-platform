@@ -90,10 +90,16 @@ class EvidenceRepository:
         sort: QueueSort,
         limit: int,
         offset: int,
+        workspace_ids: Sequence[uuid.UUID] | None = None,
     ) -> tuple[list[tuple[EvidenceItem, str, int]], int]:
-        """Review-queue page of (item, document_name, citation_count) plus total."""
+        """Review-queue page of (item, document_name, citation_count) plus total.
+
+        `workspace_ids` is the caller's tenant allow-list (None = unrestricted);
+        it composes with the explicit `workspace_id` filter."""
 
         def filtered(stmt: Select[Any]) -> Select[Any]:
+            if workspace_ids is not None:
+                stmt = stmt.where(EvidenceItem.workspace_id.in_(workspace_ids))
             if workspace_id is not None:
                 stmt = stmt.where(EvidenceItem.workspace_id == workspace_id)
             if document_id is not None:

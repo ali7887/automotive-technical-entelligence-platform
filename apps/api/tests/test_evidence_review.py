@@ -252,10 +252,12 @@ async def test_queue_filters_by_review_status_and_risk(client, monkeypatch):
     assert high["total"] == 1
     assert high["items"][0]["id"] == items[1]["id"]
 
-    scoped = (
-        await client.get("/api/evidence/review-queue", params={"workspace_id": str(uuid.uuid4())})
-    ).json()
-    assert scoped["total"] == 0
+    # a workspace id that does not exist (or is another tenant's) is now a 404,
+    # not an empty page — existence must not be probeable via the queue
+    scoped = await client.get(
+        "/api/evidence/review-queue", params={"workspace_id": str(uuid.uuid4())}
+    )
+    assert scoped.status_code == 404
     assert (await client.get("/api/evidence/review-queue", params={"workspace_id": ws_id})).json()[
         "total"
     ] == 2

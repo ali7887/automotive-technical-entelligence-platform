@@ -78,7 +78,7 @@ async def test_upload_beyond_page_limit_is_rejected(client, monkeypatch):
 async def test_valid_pdf_still_uploads_and_processes(client):
     ws_id = await _create_workspace(client)
     response = await _upload(client, ws_id, "ok.pdf", pdf_with_text([_PAGE]))
-    assert response.status_code == 201
+    assert response.status_code == 202
     doc_id = response.json()["document"]["id"]
     assert (await client.get(f"/api/documents/{doc_id}")).json()["status"] == "READY"
 
