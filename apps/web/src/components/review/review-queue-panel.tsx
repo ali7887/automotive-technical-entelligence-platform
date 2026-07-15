@@ -13,6 +13,8 @@ import {
 } from "@/components/review/review-labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -25,6 +27,7 @@ import {
 import { api } from "@/lib/api/client";
 import type { EvidenceRisk, ReviewStatus } from "@/lib/api/types";
 import { errorMessage } from "@/lib/api/types";
+import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type QueueSort =
@@ -45,9 +48,6 @@ const SORT_OPTIONS: { value: QueueSort; label: string }[] = [
 ];
 
 const PAGE_SIZE = 20;
-
-const filterSelectClass =
-  "h-8 rounded-md border border-input bg-transparent px-2 text-xs shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 /** Review Queue: filterable, sortable list of evidence items awaiting human review. */
 export function ReviewQueuePanel({ workspaceId }: { workspaceId: string }) {
@@ -96,14 +96,14 @@ export function ReviewQueuePanel({ workspaceId }: { workspaceId: string }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select
+          <NativeSelect
             value={reviewStatus}
             onChange={(event) => {
               setReviewStatus(event.target.value as ReviewStatus | "");
               resetPage();
             }}
             aria-label="Filter by review status"
-            className={filterSelectClass}
+            className="text-xs"
           >
             <option value="">All review states</option>
             {(Object.keys(REVIEW_STATUS_LABELS) as ReviewStatus[]).map((value) => (
@@ -111,15 +111,15 @@ export function ReviewQueuePanel({ workspaceId }: { workspaceId: string }) {
                 {REVIEW_STATUS_LABELS[value]}
               </option>
             ))}
-          </select>
-          <select
+          </NativeSelect>
+          <NativeSelect
             value={risk}
             onChange={(event) => {
               setRisk(event.target.value as EvidenceRisk | "");
               resetPage();
             }}
             aria-label="Filter by risk"
-            className={filterSelectClass}
+            className="text-xs"
           >
             <option value="">All risks</option>
             {(Object.keys(RISK_LABELS) as EvidenceRisk[]).map((value) => (
@@ -127,22 +127,22 @@ export function ReviewQueuePanel({ workspaceId }: { workspaceId: string }) {
                 {RISK_LABELS[value]}
               </option>
             ))}
-          </select>
-          <select
+          </NativeSelect>
+          <NativeSelect
             value={sort}
             onChange={(event) => {
               setSort(event.target.value as QueueSort);
               resetPage();
             }}
             aria-label="Sort queue"
-            className={filterSelectClass}
+            className="text-xs"
           >
             {SORT_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
-          </select>
+          </NativeSelect>
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <input
               type="checkbox"
@@ -164,23 +164,39 @@ export function ReviewQueuePanel({ workspaceId }: { workspaceId: string }) {
           <Skeleton className="h-9 w-full" />
         </div>
       ) : isError ? (
-        <div className="rounded-xl border border-destructive/50 p-6 text-center text-sm">
-          <p className="font-medium">Could not load the review queue</p>
-          <p className="mt-1 text-muted-foreground">Check that the API is reachable.</p>
-        </div>
+        <EmptyState
+          variant="error"
+          title="Could not load the review queue"
+          description="Check that the API is reachable, then reload."
+        />
       ) : page.items.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-6 text-center">
-          <p className="font-medium">
-            {hasFilters ? "Nothing matches these filters" : "Queue is empty"}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {hasFilters
+        <EmptyState
+          icon={ClipboardCheck}
+          title={hasFilters ? "Nothing matches these filters" : "Queue is empty"}
+          description={
+            hasFilters
               ? "Relax the filters to see more items."
-              : "Extract requirements in the Evidence Map to fill the review queue."}
-          </p>
-        </div>
+              : "Extract requirements in the Evidence Map tab to fill the review queue."
+          }
+          action={
+            hasFilters ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setReviewStatus("");
+                  setRisk("");
+                  setIncludeArchived(false);
+                  resetPage();
+                }}
+              >
+                Clear filters
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
-        <div className="overflow-x-auto rounded-xl border">
+        <div className="overflow-x-auto rounded-xl border bg-card shadow-2xs">
           <Table>
             <TableHeader>
               <TableRow>
@@ -196,7 +212,14 @@ export function ReviewQueuePanel({ workspaceId }: { workspaceId: string }) {
                 <TableRow
                   key={item.id}
                   onClick={() => setSelectedItemId(item.id)}
-                  className="cursor-pointer"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedItemId(item.id);
+                    }
+                  }}
+                  className="cursor-pointer outline-none focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
                   aria-label={`Review ${item.requirement_text}`}
                 >
                   <TableCell className="whitespace-normal align-top">
@@ -211,14 +234,11 @@ export function ReviewQueuePanel({ workspaceId }: { workspaceId: string }) {
                   <TableCell className={cn("align-top text-xs", RISK_TEXT_CLASSES[item.risk])}>
                     {RISK_LABELS[item.risk]}
                   </TableCell>
-                  <TableCell className="align-top text-right text-xs text-muted-foreground">
+                  <TableCell className="align-top text-right font-mono text-xs tabular-nums text-muted-foreground">
                     {item.citation_count}
                   </TableCell>
-                  <TableCell className="align-top text-xs text-muted-foreground">
-                    {new Date(item.updated_at).toLocaleString(undefined, {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
+                  <TableCell className="align-top text-xs tabular-nums text-muted-foreground">
+                    {formatDateTime(item.updated_at)}
                   </TableCell>
                 </TableRow>
               ))}

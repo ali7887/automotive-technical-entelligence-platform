@@ -1,78 +1,135 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { MoreHorizontal } from "lucide-react";
+import { ChevronRight, FolderOpen, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import {
+  CreateWorkspaceDialog,
   DeleteWorkspaceDialog,
   RenameWorkspaceDialog,
 } from "@/components/workspaces/workspace-dialogs";
+import type { WorkspaceOverview } from "@/components/workspaces/use-workspace-overviews";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api/client";
+import { formatDate } from "@/lib/format";
 import type { Workspace } from "@/lib/api/types";
 
-function WorkspaceCard({ workspace }: { workspace: Workspace }) {
+function WorkspaceStateBadge({ overview }: { overview: WorkspaceOverview }) {
+  if (overview.failedCount > 0) {
+    return (
+      <Badge variant="destructive">
+        {overview.failedCount} failed
+      </Badge>
+    );
+  }
+  if (overview.processingCount > 0) {
+    return <Badge variant="warning">Processing {overview.processingCount}</Badge>;
+  }
+  if (overview.readyCount > 0) {
+    return <Badge variant="success">Ready</Badge>;
+  }
+  return <Badge variant="neutral">Empty</Badge>;
+}
+
+function WorkspaceCard({
+  workspace,
+  overview,
+}: {
+  workspace: Workspace;
+  overview?: WorkspaceOverview;
+}) {
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   return (
-    <Card className="relative transition-colors hover:bg-accent/40">
+    <Card className="group relative gap-3 transition-all hover:border-foreground/25 hover:shadow-xs has-[a:focus-visible]:border-ring has-[a:focus-visible]:ring-3 has-[a:focus-visible]:ring-ring/50">
+      {/* stretched link: the whole card opens the workspace */}
+      <Link
+        href={`/workspaces/${workspace.id}`}
+        className="absolute inset-0 z-0 rounded-xl outline-none"
+        aria-label={`Open workspace ${workspace.name}`}
+      />
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
-          <Link href={`/workspaces/${workspace.id}`} className="min-w-0 flex-1">
-            <CardTitle className="truncate">{workspace.name}</CardTitle>
-            <CardDescription className="mt-1">
-              Created {new Date(workspace.created_at).toLocaleDateString()}
-            </CardDescription>
-          </Link>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="ghost" size="icon" aria-label="Workspace actions">
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setRenaming(true)}>Rename</DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <CardTitle className="min-w-0 flex-1 truncate">{workspace.name}</CardTitle>
+          <div className="relative z-10 -mt-1 flex shrink-0 items-center">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="ghost" size="icon-sm" aria-label="Workspace actions">
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setRenaming(true)}>Rename</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {overview ? (
+            <WorkspaceStateBadge overview={overview} />
+          ) : (
+            <Skeleton className="h-5 w-16" />
+          )}
         </div>
       </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          {overview ? (
+            <>
+              <span className="tabular-nums">
+                {overview.documentCount} document{overview.documentCount === 1 ? "" : "s"}
+                {overview.pageCount > 0 && <> · {overview.pageCount.toLocaleString()} pages</>}
+              </span>
+              <span className="flex items-center gap-1 tabular-nums">
+                Updated {formatDate(overview.updatedAt)}
+                <ChevronRight className="size-3.5 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
+              </span>
+            </>
+          ) : (
+            <Skeleton className="h-4 w-40" />
+          )}
+        </div>
+      </CardContent>
       <RenameWorkspaceDialog workspace={workspace} open={renaming} onOpenChange={setRenaming} />
       <DeleteWorkspaceDialog workspace={workspace} open={deleting} onOpenChange={setDeleting} />
     </Card>
   );
 }
 
-export function WorkspaceList() {
-  const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["workspaces"],
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/workspaces");
-      if (!data) throw new Error(String(error ?? "Failed to load workspaces"));
-      return data;
-    },
-  });
-
+export function WorkspaceGrid({
+  workspaces,
+  overviews,
+  isPending,
+  isError,
+  onRetry,
+}: {
+  workspaces: Workspace[];
+  overviews: Map<string, WorkspaceOverview>;
+  isPending: boolean;
+  isError: boolean;
+  onRetry: () => void;
+}) {
   if (isPending) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-28 rounded-xl" />
+          <Skeleton key={i} className="h-32 rounded-xl" />
         ))}
       </div>
     );
@@ -80,33 +137,38 @@ export function WorkspaceList() {
 
   if (isError) {
     return (
-      <div className="rounded-xl border border-dashed p-10 text-center">
-        <p className="font-medium">Could not load workspaces</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Check that the API is running, then try again.
-        </p>
-        <Button variant="outline" className="mt-4" onClick={() => refetch()}>
-          Retry
-        </Button>
-      </div>
+      <EmptyState
+        variant="error"
+        title="Could not load workspaces"
+        description="Check that the API is running, then try again."
+        action={
+          <Button variant="outline" onClick={onRetry}>
+            Retry
+          </Button>
+        }
+      />
     );
   }
 
-  if (data.length === 0) {
+  if (workspaces.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed p-10 text-center">
-        <p className="font-medium">No workspaces yet</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Create a workspace to start uploading regulations and standards.
-        </p>
-      </div>
+      <EmptyState
+        icon={FolderOpen}
+        title="No workspaces yet"
+        description="A workspace groups the documents for one regulation, standard, or project — e.g. ECE-R13 Rev 5 or ISO 26262 Part 6."
+        action={<CreateWorkspaceDialog />}
+      />
     );
   }
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {data.map((workspace) => (
-        <WorkspaceCard key={workspace.id} workspace={workspace} />
+      {workspaces.map((workspace) => (
+        <WorkspaceCard
+          key={workspace.id}
+          workspace={workspace}
+          overview={overviews.get(workspace.id)}
+        />
       ))}
     </div>
   );

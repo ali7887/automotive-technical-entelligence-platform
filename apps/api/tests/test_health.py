@@ -13,6 +13,8 @@ async def test_health_reports_all_services(client):
     assert set(body["services"]) == {"postgres", "redis", "qdrant"}
     for service in body["services"].values():
         assert service["status"] in ("ok", "error")
+    # tests run without an OPENAI_API_KEY, so generation must report disabled
+    assert body["generation_enabled"] is False
 
 
 async def test_liveness_never_touches_dependencies(client, monkeypatch):

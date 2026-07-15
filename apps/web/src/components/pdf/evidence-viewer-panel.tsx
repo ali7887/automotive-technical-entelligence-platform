@@ -48,15 +48,19 @@ export function EvidenceViewerPanel() {
         role="dialog"
         aria-modal="true"
         aria-label={`Evidence in ${target.documentName}`}
-        className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l bg-background shadow-xl"
+        className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l bg-card shadow-xl"
       >
         <header className="flex items-center gap-2 border-b px-4 py-3">
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{target.documentName}</p>
             <div className="mt-0.5 flex items-center gap-2">
-              {target.clauseId && <Badge variant="outline">{target.clauseId}</Badge>}
-              <span className="text-xs text-muted-foreground">
-                Evidence on page {target.page}
+              {target.clauseId && (
+                <Badge variant="outline" className="font-mono">
+                  {target.clauseId}
+                </Badge>
+              )}
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                evidence on p. {target.page}
               </span>
             </div>
           </div>
@@ -64,6 +68,7 @@ export function EvidenceViewerPanel() {
             variant="ghost"
             size="icon"
             aria-label="Open original PDF in a new tab"
+            nativeButton={false}
             render={
               <a
                 href={`${API_BASE_URL}/api/documents/${target.documentId}/file`}
@@ -80,8 +85,9 @@ export function EvidenceViewerPanel() {
         </header>
 
         {target.quote && (
-          <blockquote className="border-b bg-muted/50 px-4 py-2 text-xs text-muted-foreground">
-            Looking for: <span className="italic">“{target.quote}”</span>
+          <blockquote className="line-clamp-2 border-b bg-muted/50 px-4 py-2 text-xs text-muted-foreground">
+            Looking for:{" "}
+            <span className="italic">“{target.quote.replace(/\s+/g, " ").trim()}”</span>
           </blockquote>
         )}
 

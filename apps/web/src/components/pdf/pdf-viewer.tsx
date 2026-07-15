@@ -74,7 +74,7 @@ export function PdfViewer({
       if (quoteNorm.length < MIN_OVERLAP) return safe;
       const itemNorm = normalize(textItem.str);
       if (itemNorm.length === 0 || !itemMatchesQuote(itemNorm, quoteNorm)) return safe;
-      return `<mark class="rounded-xs bg-yellow-300/70 text-transparent dark:bg-yellow-400/50">${safe}</mark>`;
+      return `<mark class="rounded-xs bg-info/25 text-transparent">${safe}</mark>`;
     },
     [quoteNorm],
   );
@@ -82,9 +82,11 @@ export function PdfViewer({
   const clampPage = (page: number) =>
     Math.min(Math.max(1, page), numPages ?? Number.MAX_SAFE_INTEGER);
 
+  const citedPage = clampPage(Math.max(1, initialPage));
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-center gap-2 border-b px-4 py-2">
+      <div className="relative flex items-center justify-center gap-2 border-b bg-card px-4 py-2">
         <Button
           variant="outline"
           size="icon"
@@ -94,9 +96,9 @@ export function PdfViewer({
         >
           <ChevronLeft className="size-4" />
         </Button>
-        <span className="min-w-24 text-center text-sm tabular-nums text-muted-foreground">
-          Page {pageNumber}
-          {numPages != null && ` of ${numPages}`}
+        <span className="min-w-24 text-center font-mono text-sm tabular-nums text-muted-foreground">
+          {pageNumber}
+          {numPages != null && ` / ${numPages}`}
         </span>
         <Button
           variant="outline"
@@ -107,6 +109,16 @@ export function PdfViewer({
         >
           <ChevronRight className="size-4" />
         </Button>
+        {pageNumber !== citedPage && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute right-3 text-link hover:text-link"
+            onClick={() => setPageNumber(citedPage)}
+          >
+            Back to evidence (p. {citedPage})
+          </Button>
+        )}
       </div>
 
       <div ref={containerRef} className="min-h-0 flex-1 overflow-auto bg-muted/40 p-3">

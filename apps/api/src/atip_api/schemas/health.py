@@ -12,6 +12,9 @@ class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     version: str
     services: dict[str, ServiceStatus]
+    # Whether an LLM key is configured. Lets clients disable ask/extract controls
+    # up front instead of surfacing generation_disabled errors after submit.
+    generation_enabled: bool
 
 
 class LivenessResponse(BaseModel):

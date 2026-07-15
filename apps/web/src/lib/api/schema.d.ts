@@ -895,6 +895,8 @@ export interface components {
             services: {
                 [key: string]: components["schemas"]["ServiceStatus"];
             };
+            /** Generation Enabled */
+            generation_enabled: boolean;
         };
         /** JobRead */
         JobRead: {

@@ -7,6 +7,8 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -19,6 +21,7 @@ import {
 import { api, API_BASE_URL } from "@/lib/api/client";
 import type { EvidenceItem, EvidenceRisk, EvidenceStatus } from "@/lib/api/types";
 import { errorMessage } from "@/lib/api/types";
+import { useGenerationEnabled } from "@/lib/api/use-health";
 import { loadReviewerName, reviewerOrAnonymous } from "@/lib/reviewer";
 import { useEvidenceViewer } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -40,9 +43,9 @@ const RISK_OPTIONS: { value: EvidenceRisk; label: string }[] = [
 
 const RISK_CLASSES: Record<EvidenceRisk, string> = {
   UNRATED: "",
-  LOW: "text-emerald-600 dark:text-emerald-500",
-  MEDIUM: "text-amber-600 dark:text-amber-500",
-  HIGH: "text-red-600 dark:text-red-500",
+  LOW: "text-success-strong",
+  MEDIUM: "text-warning-strong",
+  HIGH: "text-destructive-strong",
 };
 
 export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
@@ -50,6 +53,8 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
   const [documentId, setDocumentId] = useState("");
   const [includeHistory, setIncludeHistory] = useState(false);
   const openEvidence = useEvidenceViewer((state) => state.openEvidence);
+  // extraction runs through the LLM, so it is disabled without a configured key
+  const generationOff = useGenerationEnabled() === false;
 
   const { data: documents } = useQuery({
     queryKey: ["documents", workspaceId],
@@ -194,19 +199,27 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
             <Download className="size-3.5" />
             JSON
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!items || items.length === 0}
-            render={
-              <a
-                href={`${API_BASE_URL}/api/workspaces/${workspaceId}/evidence/export.md?include_history=${includeHistory}`}
-              />
-            }
-          >
-            <Download className="size-3.5" />
-            Markdown
-          </Button>
+          {/* anchors cannot be disabled, so the empty state gets a real disabled button */}
+          {items && items.length > 0 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={
+                <a
+                  href={`${API_BASE_URL}/api/workspaces/${workspaceId}/evidence/export.md?include_history=${includeHistory}`}
+                />
+              }
+            >
+              <Download className="size-3.5" />
+              Markdown
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled>
+              <Download className="size-3.5" />
+              Markdown
+            </Button>
+          )}
         </div>
       </div>
 
@@ -217,11 +230,12 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
           if (documentId) extract.mutate(documentId);
         }}
       >
-        <select
+        <NativeSelect
           value={documentId}
           onChange={(event) => setDocumentId(event.target.value)}
           aria-label="Document to extract from"
-          className="h-9 max-w-64 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className="max-w-64"
+          disabled={generationOff}
         >
           <option value="">Select a document…</option>
           {readyDocuments.map((document) => (
@@ -229,8 +243,8 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
               {document.name}
             </option>
           ))}
-        </select>
-        <Button type="submit" size="sm" disabled={!documentId || extract.isPending}>
+        </NativeSelect>
+        <Button type="submit" size="sm" disabled={!documentId || extract.isPending || generationOff}>
           {extract.isPending ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
@@ -239,8 +253,9 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
           Extract requirements
         </Button>
         <p className="text-xs text-muted-foreground">
-          Re-extracting replaces unreviewed items; reviewed items are archived with their
-          history intact.
+          {generationOff
+            ? "Extraction requires a model API key on the server; reviewing existing evidence stays available."
+            : "Re-extracting replaces unreviewed items; reviewed items are archived with their history intact."}
         </p>
       </form>
 
@@ -250,19 +265,23 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
           <Skeleton className="h-9 w-full" />
         </div>
       ) : isError ? (
-        <div className="rounded-xl border border-destructive/50 p-6 text-center text-sm">
-          <p className="font-medium">Could not load the Evidence Map</p>
-          <p className="mt-1 text-muted-foreground">Check that the API is reachable.</p>
-        </div>
+        <EmptyState
+          variant="error"
+          title="Could not load the Evidence Map"
+          description="Check that the API is reachable, then reload."
+        />
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-6 text-center">
-          <p className="font-medium">No evidence yet</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Pick a processed document and extract its requirements to build the map.
-          </p>
-        </div>
+        <EmptyState
+          icon={ScanSearch}
+          title="No evidence yet"
+          description={
+            generationOff
+              ? "Extraction needs a model API key on the server. Once configured, pick a processed document above to build the map."
+              : "Pick a processed document above and extract its requirements — every entry is backed by a quote verified against the source text."
+          }
+        />
       ) : (
-        <div className="overflow-x-auto rounded-xl border">
+        <div className="overflow-x-auto rounded-xl border bg-card shadow-2xs">
           <Table>
             <TableHeader>
               <TableRow>
@@ -294,7 +313,7 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
                                 clauseId: citation.clause_id,
                               })
                             }
-                            className="inline-flex items-center gap-1.5 rounded border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+                            className="inline-flex items-center gap-1.5 rounded border bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:border-info hover:text-foreground"
                             aria-label={`Verify evidence on ${item.document_name}, page ${citation.page_start}`}
                           >
                             <FileSearch className="size-3" />
@@ -305,7 +324,7 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
                     </ul>
                   </TableCell>
                   <TableCell className="align-top">
-                    <select
+                    <NativeSelect
                       value={item.status}
                       onChange={(event) =>
                         update.mutate({
@@ -315,17 +334,17 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
                         })
                       }
                       aria-label="Review status"
-                      className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                      className="w-full px-2 text-xs"
                     >
                       {STATUS_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </TableCell>
                   <TableCell className="align-top">
-                    <select
+                    <NativeSelect
                       value={item.risk}
                       onChange={(event) =>
                         update.mutate({
@@ -335,17 +354,14 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
                         })
                       }
                       aria-label="Risk rating"
-                      className={cn(
-                        "h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                        RISK_CLASSES[item.risk],
-                      )}
+                      className={cn("w-full px-2 text-xs", RISK_CLASSES[item.risk])}
                     >
                       {RISK_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </TableCell>
                 </TableRow>
               ))}
@@ -356,8 +372,10 @@ export function EvidenceMapPanel({ workspaceId }: { workspaceId: string }) {
 
       {items && items.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          {items.length} requirement{items.length === 1 ? "" : "s"}
-          <Badge variant="outline" className="ml-2">
+          <span className="tabular-nums">
+            {items.length} requirement{items.length === 1 ? "" : "s"}
+          </span>
+          <Badge variant="success" className="ml-2">
             all citations quote-verified
           </Badge>
         </p>

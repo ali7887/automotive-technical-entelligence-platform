@@ -1,14 +1,17 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, Search } from "lucide-react";
+import { FileSearch, Loader2, Search } from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api/client";
 import { errorMessage, type SearchResult } from "@/lib/api/types";
+import { formatPages } from "@/lib/format";
+import { useEvidenceViewer } from "@/lib/store";
 
 export function SearchPanel({ workspaceId }: { workspaceId: string }) {
   const [query, setQuery] = useState("");
@@ -56,29 +59,36 @@ export function SearchPanel({ workspaceId }: { workspaceId: string }) {
         </Button>
       </form>
 
+      {search.isIdle && (
+        <EmptyState
+          icon={Search}
+          title="Search this workspace"
+          description="Results are ranked with reciprocal rank fusion and carry clause and page provenance, so every hit can be verified on the source document."
+        />
+      )}
+
       {search.isError && (
-        <div className="rounded-xl border border-dashed p-6 text-center">
-          <p className="font-medium">Search failed</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {errorMessage(search.error, "Please try again.")}
-          </p>
-        </div>
+        <EmptyState
+          variant="error"
+          title="Search failed"
+          description={errorMessage(search.error, "Please try again.")}
+        />
       )}
 
       {search.isSuccess && (
         <div className="space-y-3">
           {!search.data.semantic_used && search.data.results.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Keyword-only results — semantic search is not configured.
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant="neutral">keyword-only</Badge>
+              Semantic search is not configured; results use keyword ranking.
             </p>
           )}
           {search.data.results.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-6 text-center">
-              <p className="font-medium">No matches</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Nothing in this workspace matched &ldquo;{search.data.query}&rdquo;.
-              </p>
-            </div>
+            <EmptyState
+              icon={Search}
+              title="No matches"
+              description={`Nothing in this workspace matched “${search.data.query}”. Try different terms, or check that documents have finished processing.`}
+            />
           ) : (
             <ul className="space-y-3">
               {search.data.results.map((result) => (
@@ -93,17 +103,20 @@ export function SearchPanel({ workspaceId }: { workspaceId: string }) {
 }
 
 function SearchResultCard({ result }: { result: SearchResult }) {
-  const pages =
-    result.page_start === result.page_end
-      ? `p. ${result.page_start}`
-      : `pp. ${result.page_start}–${result.page_end}`;
+  const openEvidence = useEvidenceViewer((state) => state.openEvidence);
   return (
-    <li className="rounded-xl border p-4">
+    <li className="rounded-xl border bg-card p-4 shadow-2xs">
       <div className="flex flex-wrap items-center gap-2">
-        {result.clause_id && <Badge variant="outline">{result.clause_id}</Badge>}
+        {result.clause_id && (
+          <Badge variant="outline" className="font-mono">
+            {result.clause_id}
+          </Badge>
+        )}
         <span className="truncate text-sm font-medium">{result.document_name}</span>
-        <span className="text-xs text-muted-foreground">{pages}</span>
-        <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+        <span className="font-mono text-xs tabular-nums text-muted-foreground">
+          {formatPages(result.page_start, result.page_end)}
+        </span>
+        <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
           RRF {result.scores.rrf.toFixed(4)}
           {result.scores.keyword_rank != null && ` · kw #${result.scores.keyword_rank}`}
           {result.scores.semantic_rank != null && ` · sem #${result.scores.semantic_rank}`}
@@ -112,9 +125,27 @@ function SearchResultCard({ result }: { result: SearchResult }) {
       {result.heading && (
         <p className="mt-2 text-sm font-medium text-muted-foreground">{result.heading}</p>
       )}
-      <p className="mt-2 line-clamp-4 whitespace-pre-line text-sm text-muted-foreground">
-        {result.text}
+      {/* chunk text keeps raw PDF line breaks; collapse them for a clean excerpt */}
+      <p className="mt-2 line-clamp-4 text-sm text-muted-foreground">
+        {result.text.replace(/\s+/g, " ").trim()}
       </p>
+      <Button
+        variant="outline"
+        size="sm"
+        className="mt-3"
+        onClick={() =>
+          openEvidence({
+            documentId: result.document_id,
+            documentName: result.document_name,
+            page: result.page_start,
+            quote: result.text,
+            clauseId: result.clause_id,
+          })
+        }
+      >
+        <FileSearch className="size-3.5" />
+        Open in document
+      </Button>
     </li>
   );
 }

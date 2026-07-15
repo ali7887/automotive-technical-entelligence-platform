@@ -2,17 +2,22 @@ import { Badge } from "@/components/ui/badge";
 import type { DocumentStatus } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
-const STATUS_STYLES: Record<DocumentStatus, { label: string; className: string }> = {
-  PENDING: { label: "Queued", className: "bg-muted text-muted-foreground" },
-  PROCESSING: { label: "Processing", className: "bg-amber-100 text-amber-900 animate-pulse" },
-  READY: { label: "Ready", className: "bg-emerald-100 text-emerald-900" },
-  FAILED: { label: "Failed", className: "bg-red-100 text-red-900" },
+const STATUS: Record<
+  DocumentStatus,
+  { label: string; variant: "neutral" | "warning" | "success" | "destructive"; pulse?: boolean }
+> = {
+  PENDING: { label: "Queued", variant: "neutral" },
+  PROCESSING: { label: "Processing", variant: "warning", pulse: true },
+  READY: { label: "Ready", variant: "success" },
+  FAILED: { label: "Failed", variant: "destructive" },
 };
 
+/** Document pipeline state; one badge language across tables and cards. */
 export function StatusBadge({ status }: { status: DocumentStatus }) {
-  const { label, className } = STATUS_STYLES[status];
+  const { label, variant, pulse } = STATUS[status];
   return (
-    <Badge variant="outline" className={cn("border-transparent", className)}>
+    <Badge variant={variant}>
+      <span className={cn("size-1.5 rounded-full bg-current", pulse && "animate-pulse")} />
       {label}
     </Badge>
   );

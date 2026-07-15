@@ -26,6 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api/client";
 import type {
@@ -34,16 +35,10 @@ import type {
   SubmittableReviewAction,
 } from "@/lib/api/types";
 import { errorMessage } from "@/lib/api/types";
+import { formatDateTime } from "@/lib/format";
 import { loadReviewerName, reviewerOrAnonymous, saveReviewerName } from "@/lib/reviewer";
 import { useEvidenceViewer } from "@/lib/store";
 import { cn } from "@/lib/utils";
-
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
 
 function TimelineEvent({ event }: { event: ReviewEvent }) {
   const statusChanged = event.previous_status !== event.next_status;
@@ -61,7 +56,7 @@ function TimelineEvent({ event }: { event: ReviewEvent }) {
           </Badge>
         )}
       </p>
-      <p className="text-xs text-muted-foreground">{formatTimestamp(event.created_at)}</p>
+      <p className="text-xs tabular-nums text-muted-foreground">{formatDateTime(event.created_at)}</p>
       {statusChanged && (
         <p className="mt-0.5 text-xs text-muted-foreground">
           {REVIEW_STATUS_LABELS[event.previous_status]} →{" "}
@@ -211,7 +206,7 @@ export function ReviewDetailDrawer({
         role="dialog"
         aria-modal="true"
         aria-label="Evidence review details"
-        className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l bg-background shadow-xl"
+        className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l bg-card shadow-xl"
       >
         <header className="flex items-start gap-2 border-b px-4 py-3">
           <div className="min-w-0 flex-1">
@@ -219,7 +214,7 @@ export function ReviewDetailDrawer({
               <Skeleton className="h-6 w-64" />
             ) : (
               <>
-                <p className="text-sm font-medium">{item.requirement_text}</p>
+                <p className="line-clamp-3 text-sm font-medium">{item.requirement_text}</p>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   <Badge variant="outline" className={REVIEW_STATUS_CLASSES[item.review_status]}>
                     {REVIEW_STATUS_LABELS[item.review_status]}
@@ -262,12 +257,12 @@ export function ReviewDetailDrawer({
                           clauseId: citation.clause_id,
                         })
                       }
-                      className="flex w-full items-start gap-2 rounded border bg-muted/50 px-2 py-1.5 text-left text-xs transition-colors hover:border-primary"
+                      className="flex w-full items-start gap-2 rounded-md border bg-muted/50 px-2 py-1.5 text-left text-xs transition-colors hover:border-info"
                       aria-label={`Open evidence on page ${citation.page_start}`}
                     >
                       <FileSearch className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
-                      <span>
-                        <span className="font-medium">
+                      <span className="line-clamp-2">
+                        <span className="font-mono font-medium">
                           {citation.clause_id ?? `p. ${citation.page_start}`}
                         </span>{" "}
                         <span className="text-muted-foreground">“{citation.quote}”</span>
@@ -364,18 +359,18 @@ export function ReviewDetailDrawer({
                   <label htmlFor="review-risk" className="text-xs text-muted-foreground">
                     Risk
                   </label>
-                  <select
+                  <NativeSelect
                     id="review-risk"
                     value={riskDraft ?? item.risk}
                     onChange={(event) => setRiskDraft(event.target.value as EvidenceRisk)}
-                    className="h-8 rounded-md border border-input bg-transparent px-2 text-xs shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    className="px-2 text-xs"
                   >
                     {(Object.keys(RISK_LABELS) as EvidenceRisk[]).map((value) => (
                       <option key={value} value={value}>
                         {RISK_LABELS[value]}
                       </option>
                     ))}
-                  </select>
+                  </NativeSelect>
                   <Button
                     size="sm"
                     variant="outline"

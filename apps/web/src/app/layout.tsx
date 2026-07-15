@@ -35,21 +35,21 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <Providers>
-          <header className="border-b">
-            <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-4">
-              <Link href="/" className="font-semibold tracking-tight">
-                ATIP
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
+          <header className="sticky top-0 z-40 border-b bg-card">
+            <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-6">
+              <Link href="/" className="flex min-w-0 items-baseline gap-3">
+                <span className="font-serif text-lg font-semibold tracking-tight">ATIP</span>
+                <span className="hidden truncate text-xs text-muted-foreground md:inline">
                   Automotive Technical Intelligence Platform
                 </span>
               </Link>
-              <div className="flex items-center gap-4">
+              <div className="flex shrink-0 items-center gap-3">
                 <HealthStatus />
                 <UserMenu />
               </div>
             </div>
           </header>
-          <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
+          <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">{children}</main>
         </Providers>
       </body>
     </html>

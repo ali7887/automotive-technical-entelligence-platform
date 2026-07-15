@@ -111,7 +111,10 @@ async def health(response: Response) -> HealthResponse:
     if not healthy:
         response.status_code = 503
     return HealthResponse(
-        status="ok" if healthy else "degraded", version=get_app_version(), services=services
+        status="ok" if healthy else "degraded",
+        version=get_app_version(),
+        services=services,
+        generation_enabled=settings.openai_api_key_value is not None,
     )
 
 

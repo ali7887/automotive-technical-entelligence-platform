@@ -1,9 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { FileText } from "lucide-react";
 
 import { StatusBadge } from "@/components/documents/status-badge";
+import { UploadButton } from "@/components/documents/upload-button";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -14,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api/client";
+import { formatDateTime } from "@/lib/format";
 
 export function DocumentsTable({ workspaceId }: { workspaceId: string }) {
   const { data, isPending, isError, refetch } = useQuery({
@@ -46,28 +50,32 @@ export function DocumentsTable({ workspaceId }: { workspaceId: string }) {
 
   if (isError) {
     return (
-      <div className="rounded-xl border border-dashed p-10 text-center">
-        <p className="font-medium">Could not load documents</p>
-        <Button variant="outline" className="mt-4" onClick={() => refetch()}>
-          Retry
-        </Button>
-      </div>
+      <EmptyState
+        variant="error"
+        title="Could not load documents"
+        description="Check that the API is reachable, then try again."
+        action={
+          <Button variant="outline" onClick={() => refetch()}>
+            Retry
+          </Button>
+        }
+      />
     );
   }
 
   if (data.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed p-10 text-center">
-        <p className="font-medium">No documents yet</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Upload a regulation or standard PDF to get started.
-        </p>
-      </div>
+      <EmptyState
+        icon={FileText}
+        title="No documents yet"
+        description="Upload a regulation or standard PDF — it is chunked clause by clause with page provenance, ready for search, questions, and evidence extraction."
+        action={<UploadButton workspaceId={workspaceId} />}
+      />
     );
   }
 
   return (
-    <div className="rounded-xl border">
+    <div className="overflow-x-auto rounded-xl border bg-card shadow-2xs">
       <Table>
         <TableHeader>
           <TableRow>
@@ -84,11 +92,11 @@ export function DocumentsTable({ workspaceId }: { workspaceId: string }) {
               <TableCell>
                 <StatusBadge status={document.status} />
               </TableCell>
-              <TableCell className="text-right tabular-nums">
+              <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
                 {document.page_count ?? "—"}
               </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                {new Date(document.created_at).toLocaleString()}
+              <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+                {formatDateTime(document.created_at)}
               </TableCell>
             </TableRow>
           ))}

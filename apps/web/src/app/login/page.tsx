@@ -40,9 +40,15 @@ function LoginForm() {
 
   return (
     <div className="mx-auto mt-16 w-full max-w-sm">
+      <div className="mb-6 text-center">
+        <p className="font-serif text-2xl font-semibold tracking-tight">ATIP</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Automotive Technical Intelligence Platform
+        </p>
+      </div>
       <Card>
         <CardHeader>
-          <CardTitle>Sign in to ATIP</CardTitle>
+          <CardTitle>Sign in</CardTitle>
           <CardDescription>
             Verified AI workspace for automotive compliance documents. Accounts are provisioned
             by your administrator.
@@ -75,7 +81,10 @@ function LoginForm() {
               />
             </div>
             {error && (
-              <p className="flex items-start gap-2 text-sm text-destructive" role="alert">
+              <p
+                className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive-soft px-3 py-2 text-sm text-destructive-strong"
+                role="alert"
+              >
                 <CircleAlert className="mt-0.5 size-4 shrink-0" />
                 {error}
               </p>

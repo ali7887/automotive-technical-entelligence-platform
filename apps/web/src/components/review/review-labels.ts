@@ -14,10 +14,10 @@ export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
 /** Badge tint per review status; pairs with the outline badge variant. */
 export const REVIEW_STATUS_CLASSES: Record<ReviewStatus, string> = {
   NEW: "border-border text-muted-foreground",
-  IN_REVIEW: "border-blue-500/50 text-blue-600 dark:text-blue-400",
-  APPROVED: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400",
-  REJECTED: "border-red-500/50 text-red-600 dark:text-red-400",
-  NEEDS_REVISION: "border-amber-500/50 text-amber-600 dark:text-amber-400",
+  IN_REVIEW: "border-info/40 text-info-strong",
+  APPROVED: "border-success/40 text-success-strong",
+  REJECTED: "border-destructive/40 text-destructive-strong",
+  NEEDS_REVISION: "border-warning/50 text-warning-strong",
 };
 
 export const REVIEW_ACTION_LABELS: Record<ReviewAction, string> = {
@@ -40,7 +40,7 @@ export const RISK_LABELS: Record<EvidenceRisk, string> = {
 
 export const RISK_TEXT_CLASSES: Record<EvidenceRisk, string> = {
   UNRATED: "text-muted-foreground",
-  LOW: "text-emerald-600 dark:text-emerald-500",
-  MEDIUM: "text-amber-600 dark:text-amber-500",
-  HIGH: "text-red-600 dark:text-red-500",
+  LOW: "text-success-strong",
+  MEDIUM: "text-warning-strong",
+  HIGH: "text-destructive-strong",
 };
