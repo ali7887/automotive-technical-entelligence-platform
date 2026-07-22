@@ -21,10 +21,26 @@ import { TabList, TabPanel } from "@/components/ui/tabs";
 import { api } from "@/lib/api/client";
 import { formatDate } from "@/lib/format";
 
-type WorkspaceTab = "documents" | "ask" | "evidence" | "review" | "search";
+const WORKSPACE_TABS = ["documents", "ask", "evidence", "review", "search"] as const;
+type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
-export function WorkspaceDetail({ workspaceId }: { workspaceId: string }) {
-  const [tab, setTab] = useState<WorkspaceTab>("documents");
+function isWorkspaceTab(value: string | undefined): value is WorkspaceTab {
+  return (WORKSPACE_TABS as readonly string[]).includes(value ?? "");
+}
+
+export function WorkspaceDetail({
+  workspaceId,
+  initialTab,
+  initialQuestion,
+}: {
+  workspaceId: string;
+  /** e.g. `?tab=ask` from dashboard card actions; invalid values fall back to documents */
+  initialTab?: string;
+  initialQuestion?: string;
+}) {
+  const [tab, setTab] = useState<WorkspaceTab>(
+    isWorkspaceTab(initialTab) ? initialTab : "documents",
+  );
 
   const { data: workspace, isPending, isError } = useQuery({
     queryKey: ["workspaces", workspaceId],
@@ -131,14 +147,14 @@ export function WorkspaceDetail({ workspaceId }: { workspaceId: string }) {
           <div>
             <h2 className="text-lg font-semibold tracking-tight">Documents</h2>
             <p className="text-sm text-muted-foreground">
-              Source PDFs, chunked clause by clause with page provenance.
+              Source PDFs with page-level citations for verified evidence retrieval.
             </p>
           </div>
           <DocumentsTable workspaceId={workspaceId} />
         </section>
       </TabPanel>
       <TabPanel id="ask" active={tab === "ask"}>
-        <ChatPanel workspaceId={workspaceId} />
+        <ChatPanel workspaceId={workspaceId} initialQuestion={initialQuestion} />
       </TabPanel>
       <TabPanel id="evidence" active={tab === "evidence"}>
         <EvidenceMapPanel workspaceId={workspaceId} />
