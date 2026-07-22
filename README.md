@@ -9,7 +9,7 @@ ATIP is built for document-first regulatory and engineering workflows where trac
 ## Core features
 
 - **Workspace dashboard** — organize documents by regulation, standard, or project with workspace-level rollups for documents, indexed pages, and processing status.
-- **Secure sign-in and access control** — server-side sessions with organization isolation and per-workspace roles.
+- **Secure sign-in and access control** — server-side sessions with organization isolation and per-workspace roles. Self-service signup creates a new organization; accounts can also be provisioned from the API CLI.
 - **PDF upload and processing** — validate, extract, chunk, embed, and index technical PDFs through an asynchronous pipeline with visible job progress.
 - **Clause-aware document structure** — preserve clause IDs, headings, section lineage, and page ranges so retrieval results remain auditable.
 - **Hybrid search** — combine PostgreSQL full-text search with Qdrant semantic retrieval using Reciprocal Rank Fusion (RRF), with optional reranking.
@@ -48,7 +48,7 @@ FastAPI backend (apps/api)
         +-- arq worker   document processing pipeline
 ```
 
-ATIP is implemented as a monorepo with a Next.js frontend and an async FastAPI backend. The data layer uses PostgreSQL for system-of-record and keyword retrieval, Qdrant for semantic search, and Redis plus arq for background processing.
+ATIP is implemented as a monorepo with a Next.js frontend and an async FastAPI backend. The data layer uses PostgreSQL for system-of-record and keyword retrieval, Qdrant for semantic search, and Redis plus arq for background processing. The arq queue is optional: when disabled or unreachable (the development default), uploads are processed by an in-process background task instead.
 
 ## Technology stack
 
@@ -102,23 +102,25 @@ If AI generation is unavailable, the platform does not fail blindly. Keyword sea
 
 ## Local development notes
 
-The project is designed to run with containerized supporting services and separate web and API applications. In a typical local setup:
+The project runs as containerized supporting services plus separate web and API dev servers:
 
-- the frontend runs on `http://localhost:3000`
-- the API runs on `http://127.0.0.1:8000`
-- supporting services include PostgreSQL, Redis, and Qdrant
+```bash
+pnpm infra:up                 # PostgreSQL, Redis, Qdrant (docker/docker-compose.yml)
 
-Common observed environment variables include:
+cd apps/api
+uv run alembic upgrade head   # apply database migrations
+uv run fastapi dev            # API on http://127.0.0.1:8000
 
-- `OPENAI_API_KEY`
-- `OPENAI_BASE_URL`
-- `LLM_MODEL`
+pnpm dev                      # web on http://localhost:3000 (from the repo root)
+```
 
-Refer to the repository's `docs/` directory and project configuration files for exact setup, deployment, and environment details.
+`.env.example` is the annotated environment reference — copy it to `apps/api/.env`. Every variable has a safe development default; AI features additionally need `OPENAI_API_KEY` (and optionally `OPENAI_BASE_URL`, `LLM_MODEL`). Create the first account through the signup page, or provision one with the API's `create-user` CLI (see `.env.example`).
+
+See `docs/11_DEPLOYMENT_DEV.md` for the full local deployment walkthrough.
 
 ## Quality and verification
 
-The implementation includes automated backend tests, static analysis, and type checking. The system also uses typed API contracts and runtime validation at boundaries such as streaming events.
+The implementation includes automated backend tests (pytest, plus an end-to-end suite), frontend unit tests (vitest), static analysis, and type checking on both sides (pyright, tsc). The system also uses typed API contracts and runtime validation at boundaries such as streaming events.
 
 ## Current limitations
 
@@ -136,6 +138,7 @@ For deeper technical and operational details, review:
 
 - `docs/`
 - `prompts/`
+- `TechStack.md`
 - `CLAUDE.md`
 
 ## Summary
