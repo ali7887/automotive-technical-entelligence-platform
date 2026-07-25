@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, FolderOpen, MoreHorizontal } from "lucide-react";
+import { ChevronRight, FolderOpen, MessageSquareText, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -24,6 +24,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/format";
 import type { Workspace } from "@/lib/api/types";
 
+// Display-only category tags keyed by workspace name. Full literal class strings
+// (not interpolated) so Tailwind's scanner keeps these colors in the prod build.
+const WORKSPACE_CATEGORIES: Record<string, { label: string; className: string }> = {
+  "FMVSS 108 — Lighting Standards": { label: "LIGHTING", className: "text-amber-600 dark:text-amber-400" },
+  "ISO 26262 — Functional Safety": { label: "SAFETY", className: "text-red-600 dark:text-red-400" },
+  "Euro 7 — Emissions Compliance": { label: "EMISSIONS", className: "text-green-600 dark:text-green-400" },
+  "UNECE R155 — Cybersecurity": { label: "CYBERSECURITY", className: "text-blue-600 dark:text-blue-400" },
+  "FMVSS Lighting": { label: "LIGHTING", className: "text-amber-600 dark:text-amber-400" },
+};
+
 function WorkspaceStateBadge({ overview }: { overview: WorkspaceOverview }) {
   if (overview.failedCount > 0) {
     return (
@@ -36,7 +46,13 @@ function WorkspaceStateBadge({ overview }: { overview: WorkspaceOverview }) {
     return <Badge variant="warning">Processing {overview.processingCount}</Badge>;
   }
   if (overview.readyCount > 0) {
-    return <Badge variant="success">Ready</Badge>;
+    // steady/healthy state reads as a calm informational marker, not a badge
+    return (
+      <span className="inline-flex cursor-default items-center gap-1.5 text-xs font-medium text-success-strong">
+        <span className="size-1.5 shrink-0 rounded-full bg-success" />
+        Ready
+      </span>
+    );
   }
   return <Badge variant="neutral">Empty</Badge>;
 }
@@ -50,9 +66,10 @@ function WorkspaceCard({
 }) {
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const category = WORKSPACE_CATEGORIES[workspace.name];
 
   return (
-    <Card className="group relative gap-3 transition-all hover:border-foreground/25 hover:shadow-xs has-[a:focus-visible]:border-ring has-[a:focus-visible]:ring-3 has-[a:focus-visible]:ring-ring/50">
+    <Card className="group relative cursor-pointer gap-3 transition-all duration-200 hover:border-primary/30 hover:shadow-md has-[a:focus-visible]:border-ring has-[a:focus-visible]:ring-3 has-[a:focus-visible]:ring-ring/50">
       {/* stretched link: the whole card opens the workspace */}
       <Link
         href={`/workspaces/${workspace.id}`}
@@ -60,6 +77,11 @@ function WorkspaceCard({
         aria-label={`Open workspace ${workspace.name}`}
       />
       <CardHeader>
+        {category && (
+          <span className={`text-[10px] font-semibold uppercase tracking-wider ${category.className}`}>
+            {category.label}
+          </span>
+        )}
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="min-w-0 flex-1 truncate">{workspace.name}</CardTitle>
           <div className="relative z-10 -mt-1 flex shrink-0 items-center">
@@ -89,6 +111,11 @@ function WorkspaceCard({
         </div>
       </CardHeader>
       <CardContent>
+        {workspace.description && (
+          <p className="mb-2 line-clamp-2 text-sm text-muted-foreground">
+            {workspace.description}
+          </p>
+        )}
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           {overview ? (
             <>
@@ -104,6 +131,26 @@ function WorkspaceCard({
           ) : (
             <Skeleton className="h-4 w-40" />
           )}
+        </div>
+        <div className="relative z-10 mt-3 flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href={`/workspaces/${workspace.id}`} />}
+          >
+            <FolderOpen className="size-3.5" />
+            Open
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            nativeButton={false}
+            render={<Link href={`/workspaces/${workspace.id}?tab=ask`} />}
+          >
+            <MessageSquareText className="size-3.5" />
+            Ask
+          </Button>
         </div>
       </CardContent>
       <RenameWorkspaceDialog workspace={workspace} open={renaming} onOpenChange={setRenaming} />

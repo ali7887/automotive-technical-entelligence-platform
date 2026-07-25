@@ -89,6 +89,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register
+         * @description Public self-service signup: create a new organization, make the caller
+         *     its org_admin, and log them straight in with the standard session cookie.
+         *
+         *     Email verification is intentionally not implemented yet — accounts are
+         *     active on creation. See atip_api/services/auth.py for the extension notes.
+         */
+        post: operations["register_api_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/logout": {
         parameters: {
             query?: never;
@@ -981,6 +1005,21 @@ export interface components {
             };
         };
         /**
+         * RegisterRequest
+         * @description Public self-service signup. The registrant names their organization and
+         *     becomes its ORG_ADMIN (see atip_api.services.auth).
+         */
+        RegisterRequest: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /** Organization Name */
+            organization_name: string;
+            /** Password */
+            password: string;
+        };
+        /**
          * RetrievedSourceRead
          * @description A retrieved chunk as numbered in the prompt; streamed before generation.
          */
@@ -1223,6 +1262,8 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /** Description */
+            description?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -1336,6 +1377,39 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_api_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

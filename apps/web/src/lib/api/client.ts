@@ -1,5 +1,6 @@
 import createClient from "openapi-fetch";
 
+import { shouldRedirectToLogin } from "../auth-nav";
 import type { paths } from "./schema";
 
 // Same-origin by default: dev proxies /api/* through the Next server
@@ -10,14 +11,14 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export const api = createClient<paths>({ baseUrl: API_BASE_URL });
 
-// A 401 anywhere outside the login screen means the session is gone
-// (expired or revoked): return to login rather than surfacing raw errors.
+// A 401 outside the public auth pages means the session is gone (expired or
+// revoked): return to login rather than surfacing raw errors. /login and
+// /signup are exempt — they legitimately 401 while probing the session.
 api.use({
   onResponse({ response }) {
     if (
-      response.status === 401 &&
       typeof window !== "undefined" &&
-      window.location.pathname !== "/login"
+      shouldRedirectToLogin(response.status, window.location.pathname)
     ) {
       window.location.assign("/login");
     }

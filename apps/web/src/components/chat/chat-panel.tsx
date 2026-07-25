@@ -36,6 +36,14 @@ function citationTarget(citation: Citation) {
   };
 }
 
+// Static suggestions only — clicking prefills the input and never auto-submits,
+// matching the initialQuestion contract.
+const SAMPLE_QUESTIONS = [
+  "What photometric requirements apply to headlamps?",
+  "Which clauses define required test procedures?",
+  "What documentation must the manufacturer provide?",
+];
+
 interface Exchange {
   id: number;
   question: string;
@@ -47,8 +55,15 @@ interface Exchange {
   errorCode?: string;
 }
 
-export function ChatPanel({ workspaceId }: { workspaceId: string }) {
-  const [question, setQuestion] = useState("");
+export function ChatPanel({
+  workspaceId,
+  initialQuestion,
+}: {
+  workspaceId: string;
+  /** Prefills the input (e.g. from the dashboard ask bar); never auto-submits. */
+  initialQuestion?: string;
+}) {
+  const [question, setQuestion] = useState(initialQuestion ?? "");
   const [documentId, setDocumentId] = useState("");
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const closeRef = useRef<(() => void) | null>(null);
@@ -155,7 +170,25 @@ export function ChatPanel({ workspaceId }: { workspaceId: string }) {
           description={
             generationOff
               ? "Meanwhile, use the Search tab to find clauses by keyword."
-              : "e.g. “What photometric requirements apply to headlamps?” Every answer cites the clauses and pages it came from."
+              : "Every answer cites the clauses and pages it came from."
+          }
+          action={
+            generationOff ? undefined : (
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {SAMPLE_QUESTIONS.map((sample) => (
+                  <Button
+                    key={sample}
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    className="rounded-full font-normal text-muted-foreground"
+                    onClick={() => setQuestion(sample)}
+                  >
+                    {sample}
+                  </Button>
+                ))}
+              </div>
+            )
           }
         />
       ) : (

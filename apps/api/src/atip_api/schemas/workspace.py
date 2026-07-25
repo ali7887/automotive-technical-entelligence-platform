@@ -17,4 +17,5 @@ class WorkspaceRead(BaseModel):
 
     id: uuid.UUID
     name: str
+    description: str | None = None
     created_at: datetime

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "gen:api": "openapi-typescript http://127.0.0.1:8000/openapi.json -o src/lib/api/schema.d.ts"
   },
   "dependencies": {
@@ -39,6 +40,7 @@
     "eslint-config-next": "16.2.10",
     "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

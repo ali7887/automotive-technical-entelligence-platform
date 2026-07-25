@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 
 import { UserMenu } from "@/components/auth/user-menu";
+import { Footer } from "@/components/footer";
 import { HealthStatus } from "@/components/health-status";
 
 import { Providers } from "./providers";
@@ -34,6 +35,12 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        {/* No-flash theme: apply persisted choice before hydration/paint. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('atip-theme');if(t==='dark'){document.documentElement.classList.add('dark');}else if(t==='light'){document.documentElement.classList.remove('dark');}}catch(e){}})();`,
+          }}
+        />
         <Providers>
           <header className="sticky top-0 z-40 border-b bg-card">
             <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-6">
@@ -50,6 +57,7 @@ export default function RootLayout({
             </div>
           </header>
           <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">{children}</main>
+          <Footer />
         </Providers>
       </body>
     </html>

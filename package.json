@@ -4,6 +4,7 @@
   "packageManager": "pnpm@11.10.0",
   "scripts": {
     "dev": "pnpm -r --parallel dev",
+    "infra:up": "docker compose -f docker/docker-compose.yml up -d --wait",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"

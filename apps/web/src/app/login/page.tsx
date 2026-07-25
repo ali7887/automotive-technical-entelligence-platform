@@ -1,6 +1,7 @@
 "use client";
 
 import { CircleAlert, Loader2, LogIn } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
@@ -50,8 +51,7 @@ function LoginForm() {
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
           <CardDescription>
-            Verified AI workspace for automotive compliance documents. Accounts are provisioned
-            by your administrator.
+            Verified AI workspace for automotive compliance and engineering documents.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -100,6 +100,15 @@ function LoginForm() {
           </form>
         </CardContent>
       </Card>
+      <p className="mt-4 text-center text-sm text-muted-foreground">
+        Don&apos;t have an account?{" "}
+        <Link
+          href="/signup"
+          className="font-medium text-foreground underline-offset-4 hover:underline"
+        >
+          Sign up
+        </Link>
+      </p>
     </div>
   );
 }

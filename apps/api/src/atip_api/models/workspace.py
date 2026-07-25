@@ -21,6 +21,7 @@ class Workspace(Base):
         ForeignKey("organizations.id", ondelete="CASCADE"), index=True
     )
     name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     documents: Mapped[list["Document"]] = relationship(

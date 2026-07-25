@@ -343,7 +343,7 @@ export function ReviewDetailDrawer({
                         : "Add a comment…"
                     }
                     aria-label="Review comment"
-                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
                   />
                   <Button
                     size="sm"

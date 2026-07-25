@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     # Override only for TLS-terminating local setups.
     session_cookie_secure: bool | None = None
     rate_limit_login_per_minute: int = Field(default=10, ge=1)
+    # public self-service signup, per client IP (abuse / mass-account creation)
+    rate_limit_register_per_minute: int = Field(default=5, ge=1)
     log_level: str = "INFO"
     log_json: bool = True
     # per-client per-minute limits on resource-heavy endpoints

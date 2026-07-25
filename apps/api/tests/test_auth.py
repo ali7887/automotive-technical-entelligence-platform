@@ -152,6 +152,28 @@ async def test_logout_revokes_session_server_side(anon_client):
     assert (await anon_client.get("/api/auth/me")).status_code == 401
 
 
+async def test_logout_without_session_is_idempotent(anon_client):
+    """Logout with no session cookie still succeeds and clears the cookie."""
+    response = await anon_client.post("/api/auth/logout")
+    assert response.status_code == 204
+    # a Set-Cookie expiring the session is emitted even when none was presented
+    assert get_settings().session_cookie_name in response.headers.get("set-cookie", "")
+
+
+async def test_logout_blocks_protected_routes(anon_client):
+    await _make_user(email="bye@acme.test", org_name="ACME-Bye")
+    await anon_client.post(
+        "/api/auth/login", json={"email": "bye@acme.test", "password": _PASSWORD}
+    )
+    assert (await anon_client.get("/api/workspaces")).status_code == 200
+
+    assert (await anon_client.post("/api/auth/logout")).status_code == 204
+    # the server-side session is revoked: protected routes now 401
+    blocked = await anon_client.get("/api/workspaces")
+    assert blocked.status_code == 401
+    assert blocked.json()["code"] == "authentication_required"
+
+
 async def test_expired_session_is_rejected(_database):
     user = await _make_user(email="old@acme.test", org_name="ACME-Old", token=None)
     async with get_session_factory()() as db:
@@ -167,6 +189,132 @@ async def test_expired_session_is_rejected(_database):
         response = await client.get("/api/auth/me")
         assert response.status_code == 401
         assert response.json()["code"] == "authentication_required"
+
+
+# --- public self-service registration ---
+
+_REGISTER = {
+    "display_name": "Dana Engineer",
+    "email": "dana@newco.test",
+    "organization_name": "NewCo Automotive",
+    "password": "correct-horse-9",
+}
+
+
+async def test_register_creates_org_admin_and_logs_in(anon_client):
+    response = await anon_client.post("/api/auth/register", json=_REGISTER)
+    assert response.status_code == 201
+    body = response.json()
+    assert body["email"] == "dana@newco.test"
+    assert body["display_name"] == "Dana Engineer"
+    assert body["role"] == UserRole.ORG_ADMIN
+    assert body["organization"]["name"] == "NewCo Automotive"
+
+    set_cookie = response.headers["set-cookie"]
+    assert "HttpOnly" in set_cookie and "samesite=strict" in set_cookie.lower()
+
+    # the session cookie persists on the client: the user is logged straight in
+    me = await anon_client.get("/api/auth/me")
+    assert me.status_code == 200
+    assert me.json()["email"] == "dana@newco.test"
+
+    # org_admin can immediately create and use a workspace in the new org
+    workspace = await anon_client.post("/api/workspaces", json={"name": "Homologation"})
+    assert workspace.status_code == 201
+
+
+async def test_register_normalizes_email(anon_client):
+    payload = {**_REGISTER, "email": "Dana@NewCo.TEST"}
+    response = await anon_client.post("/api/auth/register", json=payload)
+    assert response.status_code == 201
+    assert response.json()["email"] == "dana@newco.test"
+
+
+async def test_register_duplicate_email_is_409(anon_client):
+    assert (await anon_client.post("/api/auth/register", json=_REGISTER)).status_code == 201
+    # same email (case-insensitive), different org name
+    dup = await anon_client.post(
+        "/api/auth/register",
+        json={**_REGISTER, "email": "DANA@newco.test", "organization_name": "Other Org"},
+    )
+    assert dup.status_code == 409
+    assert dup.json()["code"] == "email_already_registered"
+
+
+async def test_register_duplicate_organization_is_409(anon_client):
+    assert (await anon_client.post("/api/auth/register", json=_REGISTER)).status_code == 201
+    # different email, same organization name (case-insensitive)
+    dup = await anon_client.post(
+        "/api/auth/register",
+        json={**_REGISTER, "email": "someone@newco.test", "organization_name": "newco automotive"},
+    )
+    assert dup.status_code == 409
+    assert dup.json()["code"] == "organization_exists"
+
+
+async def test_register_rejects_weak_or_invalid_input(anon_client, monkeypatch):
+    # this exercises validation, not throttling: lift the register limit so the
+    # several invalid attempts below are not turned into 429s
+    monkeypatch.setattr(get_settings(), "rate_limit_register_per_minute", 100)
+    cases = [
+        {**_REGISTER, "password": "short-1"},  # < 8 chars
+        {**_REGISTER, "password": "no-digits-here"},  # missing a digit
+        {**_REGISTER, "password": "12345678"},  # missing a letter
+        {**_REGISTER, "password": _REGISTER["email"]},  # equals the email
+        # <= 72 characters but > 72 bytes: must be 422, never a bcrypt 500
+        {**_REGISTER, "password": "é" * 70 + "a1"},
+        {**_REGISTER, "email": "not-an-email"},  # invalid email
+        {**_REGISTER, "display_name": ""},  # empty name
+        {**_REGISTER, "organization_name": "   "},  # blank org after trim
+    ]
+    for payload in cases:
+        response = await anon_client.post("/api/auth/register", json=payload)
+        assert response.status_code == 422, payload
+        assert response.json()["code"] == "validation_error"
+    # nothing was persisted by the rejected attempts
+    login = await anon_client.post(
+        "/api/auth/login",
+        json={"email": _REGISTER["email"], "password": _REGISTER["password"]},
+    )
+    assert login.status_code == 401
+
+
+async def test_register_multibyte_password_is_422_not_500(anon_client):
+    """Regression: a password <= 72 chars but > 72 bytes must be rejected by
+    validation, not raise inside bcrypt and surface as a 500."""
+    response = await anon_client.post(
+        "/api/auth/register",
+        json={**_REGISTER, "password": "pä55word-" + "ü" * 40},  # ~80+ bytes
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+async def test_register_accepts_72_byte_password(anon_client):
+    """The 72-byte boundary itself is valid and must succeed."""
+    password = "a1" + "b" * 70  # exactly 72 ASCII bytes, has a letter and a digit
+    assert len(password.encode("utf-8")) == 72
+    response = await anon_client.post(
+        "/api/auth/register", json={**_REGISTER, "password": password}
+    )
+    assert response.status_code == 201
+
+
+async def test_register_is_rate_limited(anon_client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "rate_limit_register_per_minute", 2)
+    ok1 = await anon_client.post(
+        "/api/auth/register", json={**_REGISTER, "email": "a@r.test", "organization_name": "R A"}
+    )
+    ok2 = await anon_client.post(
+        "/api/auth/register", json={**_REGISTER, "email": "b@r.test", "organization_name": "R B"}
+    )
+    assert ok1.status_code == 201 and ok2.status_code == 201
+    limited = await anon_client.post(
+        "/api/auth/register", json={**_REGISTER, "email": "c@r.test", "organization_name": "R C"}
+    )
+    assert limited.status_code == 429
+    assert limited.json()["code"] == "rate_limited"
+    assert "retry-after" in limited.headers
 
 
 # --- tenant isolation & workspace roles ---

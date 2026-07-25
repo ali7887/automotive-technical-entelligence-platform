@@ -68,6 +68,22 @@ class ForbiddenError(AppError):
     title = "Forbidden"
 
 
+class EmailAlreadyRegisteredError(AppError):
+    """Signup with an email that already has an account."""
+
+    status_code = 409
+    code = "email_already_registered"
+    title = "Email Already Registered"
+
+
+class OrganizationExistsError(AppError):
+    """Signup naming an organization that already exists."""
+
+    status_code = 409
+    code = "organization_exists"
+    title = "Organization Already Exists"
+
+
 class AnswerNotFoundError(AppError):
     """Verification rejected every claim: the unverified draft is withheld."""
 

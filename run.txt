@@ -1,0 +1,43 @@
+==============================================================================
+ ATIP — manual run in 3 terminals (Windows / PowerShell)
+ Open 3 PowerShell terminals at the repo root. Copy ONE block into each.
+ Order matters: run Terminal 1 first, then 2, then 3.
+ The lines starting with #  are comments (safe to copy — PowerShell ignores them).
+==============================================================================
+
+
+# ---------------------------------------------------------------------------
+# TERMINAL 1  —  INFRA (Postgres + Redis + Qdrant, via Docker)
+# Wait until it reports healthy (~30s cold) before starting Terminal 2.
+# ---------------------------------------------------------------------------
+
+docker compose -f docker/docker-compose.yml up -d --wait
+
+
+# ---------------------------------------------------------------------------
+# TERMINAL 2  —  BACKEND API  (FastAPI on http://127.0.0.1:8000)
+# Leave this window running. Ctrl+C stops the API.
+# ---------------------------------------------------------------------------
+
+cd apps\api
+$env:PYTHONUTF8 = '1'
+$env:PYTHONIOENCODING = 'utf-8'
+uv run uvicorn atip_api.main:app --host 127.0.0.1 --port 8000 --reload
+
+
+# ---------------------------------------------------------------------------
+# TERMINAL 3  —  FRONTEND  (Next.js on http://localhost:3000)
+# Leave this window running. Ctrl+C stops the web app.
+# ---------------------------------------------------------------------------
+
+cd apps\web
+pnpm dev
+
+
+# ---------------------------------------------------------------------------
+# THEN OPEN:  http://localhost:3000   (header chip should read "Operational")
+# API docs:   http://127.0.0.1:8000/docs
+#
+# TO STOP:  press Ctrl+C in Terminals 2 and 3, then in any terminal run:
+#   docker compose -f docker/docker-compose.yml down
+# ---------------------------------------------------------------------------

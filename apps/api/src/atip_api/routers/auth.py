@@ -27,13 +27,17 @@ from atip_api.db import get_session
 from atip_api.errors import InvalidCredentialsError
 from atip_api.models import Session, User
 from atip_api.ratelimit import rate_limited
-from atip_api.schemas.auth import LoginRequest, UserRead
+from atip_api.schemas.auth import LoginRequest, RegisterRequest, UserRead
+from atip_api.services.auth import register_account
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _LOGIN_LIMIT = rate_limited("login", lambda settings: settings.rate_limit_login_per_minute)
+_REGISTER_LIMIT = rate_limited(
+    "register", lambda settings: settings.rate_limit_register_per_minute
+)
 
 DbDep = Annotated[AsyncSession, Depends(get_session)]
 
@@ -77,6 +81,39 @@ async def login(
     set_session_cookie(response, settings, token)
     logger.info(
         "Login succeeded for user %s", user.id, extra={"client_ip": _client_ip(request)}
+    )
+    return UserRead.model_validate(user)
+
+
+@router.post(
+    "/register",
+    response_model=UserRead,
+    status_code=201,
+    dependencies=[_REGISTER_LIMIT],
+)
+async def register(
+    data: RegisterRequest, request: Request, response: Response, db: DbDep
+) -> UserRead:
+    """Public self-service signup: create a new organization, make the caller
+    its org_admin, and log them straight in with the standard session cookie.
+
+    Email verification is intentionally not implemented yet — accounts are
+    active on creation. See atip_api/services/auth.py for the extension notes.
+    """
+    settings = get_settings()
+    user = await register_account(
+        db,
+        display_name=data.display_name,
+        email=data.email,
+        organization_name=data.organization_name,
+        password=data.password,
+    )
+    session, token = new_session(user, settings, request)
+    db.add(session)
+    await db.commit()
+    set_session_cookie(response, settings, token)
+    logger.info(
+        "Registration succeeded for user %s", user.id, extra={"client_ip": _client_ip(request)}
     )
     return UserRead.model_validate(user)
 
