@@ -3,7 +3,7 @@
  Open 3 PowerShell terminals at the repo root. Copy ONE block into each.
  Order matters: run Terminal 1 first, then 2, then 3.
  The lines starting with #  are comments (safe to copy — PowerShell ignores them).
-==============================================================================
+==========================================
 
 
 # ---------------------------------------------------------------------------
