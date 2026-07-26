@@ -1,40 +1,31 @@
-"""Cookie-session authentication and workspace RBAC.
+"""Auth-free principal resolution and workspace RBAC.
 
-Design: opaque session tokens (not JWTs) in an HttpOnly, Secure,
-SameSite=Strict cookie. The reverse proxy serves web and API from one origin,
-so the cookie flows same-site everywhere (including EventSource for SSE chat)
-and cross-origin CORS never applies. Only the SHA-256 of the token is stored;
-deleting the row revokes the session instantly — no key rotation, no token
-re-signing, no logout blacklist.
+Authentication has been removed: the platform runs open, and every request is
+treated as a single fixed **default admin** (a PLATFORM_ADMIN). `get_current_user`
+no longer inspects any cookie or session — it lazily ensures and returns that
+one account, so all callers (routers, workspace authorization) keep their exact
+signatures. Because the principal is a PLATFORM_ADMIN, `authorize_workspace` and
+`accessible_workspace_ids` grant unrestricted access; the org/user model is kept
+intact so auth can be reinstated later by restoring cookie validation here.
 
-Tenant isolation contract:
-- a workspace in another organization is answered with 404 (its existence is
-  not leaked), exactly like a workspace that does not exist;
-- a workspace in the caller's organization without a sufficient membership is
-  403 (org_admin and platform_admin bypass memberships);
-- every auth failure is logged as structured JSON with client_ip + request_id.
+The workspace-role machinery below is unchanged and still enforced in principle;
+it is simply always satisfied by the admin principal.
 """
 
-import hashlib
 import logging
-import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-import anyio.to_thread
-import bcrypt
-from fastapi import Depends, Request, Response
+from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from atip_api.config import Settings, get_settings
 from atip_api.db import get_session
-from atip_api.errors import AuthenticationRequiredError, ForbiddenError, NotFoundError
+from atip_api.errors import ForbiddenError, NotFoundError
 from atip_api.models import (
-    Session,
+    Organization,
     User,
     UserRole,
     Workspace,
@@ -44,71 +35,25 @@ from atip_api.models import (
 
 logger = logging.getLogger(__name__)
 
-_TOKEN_BYTES = 32
+# The single principal every request runs as, now that auth is disabled.
+DEFAULT_ADMIN_EMAIL = "admin@atip.local"
+DEFAULT_ADMIN_NAME = "Ali Kiani"
+DEFAULT_ORG_NAME = "Default Organization"
+# Login is gone, so this hash can never match anything — it is a placeholder.
+_UNUSABLE_PASSWORD_HASH = "!auth-disabled"
 
 
 # --- passwords ---
 
 
 def hash_password(password: str) -> str:
+    """Retained for account-seeding scripts/CLI; unused by request handling."""
+    import bcrypt
+
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
 
 
-def verify_password(password: str, password_hash: str) -> bool:
-    try:
-        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("ascii"))
-    except ValueError:
-        return False
-
-
-async def verify_password_async(password: str, password_hash: str) -> bool:
-    """bcrypt is CPU-bound by design; keep it off the event loop."""
-    return await anyio.to_thread.run_sync(verify_password, password, password_hash)
-
-
-# --- session tokens ---
-
-
-def hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("ascii")).hexdigest()
-
-
-def new_session(user: User, settings: Settings, request: Request) -> tuple[Session, str]:
-    """Build an unsaved Session row and the raw token that goes in the cookie."""
-    token = secrets.token_urlsafe(_TOKEN_BYTES)
-    session = Session(
-        user_id=user.id,
-        token_hash=hash_token(token),
-        expires_at=datetime.now(UTC) + timedelta(hours=settings.session_ttl_hours),
-        client_ip=_client_ip(request),
-        user_agent=(request.headers.get("user-agent") or "")[:256] or None,
-    )
-    return session, token
-
-
-def set_session_cookie(response: Response, settings: Settings, token: str) -> None:
-    response.set_cookie(
-        key=settings.session_cookie_name,
-        value=token,
-        max_age=settings.session_ttl_hours * 3600,
-        httponly=True,
-        secure=settings.session_cookie_secure_effective,
-        samesite="strict",
-        path="/",
-    )
-
-
-def clear_session_cookie(response: Response, settings: Settings) -> None:
-    response.delete_cookie(
-        key=settings.session_cookie_name,
-        httponly=True,
-        secure=settings.session_cookie_secure_effective,
-        samesite="strict",
-        path="/",
-    )
-
-
-# --- request authentication ---
+# --- request principal (auth removed) ---
 
 
 def _client_ip(request: Request) -> str:
@@ -116,41 +61,55 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _auth_failure(request: Request, reason: str) -> AuthenticationRequiredError:
-    logger.warning(
-        "Authentication failed on %s %s: %s",
-        request.method,
-        request.url.path,
-        reason,
-        extra={"client_ip": _client_ip(request)},
+async def ensure_default_admin(db: AsyncSession) -> User:
+    """Lazily create (once) and return the fixed default-admin principal.
+
+    Idempotent: the org and user are keyed by their stable names, so concurrent
+    first requests converge on the same rows. The organization is eager-loaded
+    because UserRead needs it.
+    """
+    user = (
+        await db.execute(
+            select(User)
+            .options(joinedload(User.organization))
+            .where(User.email == DEFAULT_ADMIN_EMAIL)
+        )
+    ).scalar_one_or_none()
+    if user is not None:
+        return user
+
+    org = (
+        await db.execute(select(Organization).where(Organization.name == DEFAULT_ORG_NAME))
+    ).scalar_one_or_none()
+    if org is None:
+        org = Organization(name=DEFAULT_ORG_NAME)
+        db.add(org)
+        await db.flush()
+
+    user = User(
+        organization_id=org.id,
+        email=DEFAULT_ADMIN_EMAIL,
+        password_hash=_UNUSABLE_PASSWORD_HASH,
+        display_name=DEFAULT_ADMIN_NAME,
+        role=UserRole.PLATFORM_ADMIN,
     )
-    return AuthenticationRequiredError("Authentication required. Log in and retry.")
+    db.add(user)
+    await db.commit()
+    # reload with the organization relationship populated
+    return (
+        await db.execute(
+            select(User)
+            .options(joinedload(User.organization))
+            .where(User.id == user.id)
+        )
+    ).scalar_one()
 
 
 async def get_current_user(
     request: Request, db: Annotated[AsyncSession, Depends(get_session)]
 ) -> User:
-    settings = get_settings()
-    token = request.cookies.get(settings.session_cookie_name)
-    if not token:
-        raise _auth_failure(request, "no session cookie")
-
-    row = (
-        await db.execute(
-            select(Session)
-            .options(joinedload(Session.user))
-            .where(Session.token_hash == hash_token(token))
-        )
-    ).scalar_one_or_none()
-    if row is None:
-        raise _auth_failure(request, "unknown session token")
-    if row.expires_at <= datetime.now(UTC):
-        await db.delete(row)
-        await db.commit()
-        raise _auth_failure(request, "session expired")
-    if not row.user.is_active:
-        raise _auth_failure(request, f"user {row.user.id} is deactivated")
-    return row.user
+    """Auth is disabled: every request runs as the fixed default admin."""
+    return await ensure_default_admin(db)
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]

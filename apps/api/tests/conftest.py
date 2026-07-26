@@ -9,22 +9,16 @@ os.environ["MAX_UPLOAD_MB"] = "1"
 # Tests must never call a real embeddings API; fakes are injected via monkeypatch.
 os.environ["OPENAI_API_KEY"] = ""
 
-from datetime import UTC, datetime, timedelta
-
 import asyncpg
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.engine import make_url
 
 from atip_api import models  # noqa: F401  # register all tables on Base.metadata
-from atip_api.auth import hash_token
+from atip_api.auth import ensure_default_admin
 from atip_api.config import get_settings
 from atip_api.db import Base, get_engine, get_session_factory
 from atip_api.main import create_app
-from atip_api.models import Organization, Session, User, UserRole
-
-# fixed opaque token for the default test session (only its hash is stored)
-TEST_SESSION_TOKEN = "conftest-session-token"
 
 
 async def _ensure_test_database() -> None:
@@ -64,51 +58,26 @@ async def _clean_tables(_database):
 
 
 @pytest.fixture
-async def auth_user(_database) -> User:
-    """Default authenticated principal: an org_admin in its own organization.
-
-    org_admin (not member) so legacy tests keep full access to everything the
-    test itself creates; RBAC boundary tests build their own users/roles.
-    """
+async def auth_user(_database):
+    """The request principal. Auth is removed, so every request resolves to the
+    fixed default admin; tests seed their data under this same account/org."""
     async with get_session_factory()() as session:
-        org = Organization(name="Test Org")
-        session.add(org)
-        await session.flush()
-        user = User(
-            organization_id=org.id,
-            email="tester@example.com",
-            password_hash="!not-a-hash",  # login is not used by the default fixture
-            display_name="Tester",
-            role=UserRole.ORG_ADMIN,
-        )
-        session.add(user)
-        await session.flush()
-        session.add(
-            Session(
-                user_id=user.id,
-                token_hash=hash_token(TEST_SESSION_TOKEN),
-                expires_at=datetime.now(UTC) + timedelta(hours=2),
-            )
-        )
-        await session.commit()
+        user = await ensure_default_admin(session)
         return user
 
 
 @pytest.fixture
 async def client(auth_user):
-    """Authenticated API client (the default: nearly every route needs auth)."""
+    """API client. Auth is disabled — no cookie needed; every request runs as
+    the default admin (the same principal `auth_user` returns)."""
     transport = ASGITransport(app=create_app())
-    async with AsyncClient(
-        transport=transport,
-        base_url="http://test",
-        cookies={get_settings().session_cookie_name: TEST_SESSION_TOKEN},
-    ) as test_client:
+    async with AsyncClient(transport=transport, base_url="http://test") as test_client:
         yield test_client
 
 
 @pytest.fixture
 async def anon_client(_database):
-    """Unauthenticated client for auth/RBAC tests."""
+    """Alias of `client` now that auth is removed (kept for existing tests)."""
     transport = ASGITransport(app=create_app())
     async with AsyncClient(transport=transport, base_url="http://test") as test_client:
         yield test_client

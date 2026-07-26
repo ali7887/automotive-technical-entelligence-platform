@@ -9,7 +9,7 @@ ATIP is built for document-first regulatory and engineering workflows where trac
 ## Core features
 
 - **Workspace dashboard** — organize documents by regulation, standard, or project with workspace-level rollups for documents, indexed pages, and processing status.
-- **Secure sign-in and access control** — server-side sessions with organization isolation and per-workspace roles. Self-service signup creates a new organization; accounts can also be provisioned from the API CLI.
+- **Open access (authentication disabled)** — this build runs without authentication: every visitor is treated as a single default admin and the app opens directly to the dashboard. The organization/role model is retained internally but always resolves to that one admin. See "Authentication" below.
 - **PDF upload and processing** — validate, extract, chunk, embed, and index technical PDFs through an asynchronous pipeline with visible job progress.
 - **Clause-aware document structure** — preserve clause IDs, headings, section lineage, and page ranges so retrieval results remain auditable.
 - **Hybrid search** — combine PostgreSQL full-text search with Qdrant semantic retrieval using Reciprocal Rank Fusion (RRF), with optional reranking.
@@ -118,56 +118,39 @@ pnpm dev                      # web on http://localhost:3000 (from the repo root
 
 See `docs/11_DEPLOYMENT_DEV.md` for the full local deployment walkthrough.
 
-## Deployment modes
+## Authentication
 
-ATIP runs in one of two distinct modes. Choose per deployment; they do not mix.
+**Authentication is disabled in this build.** There is no login, signup, or
+session cookie. The app opens directly to the dashboard, and every API request
+is resolved to a single fixed **default admin** (`admin@atip.local`,
+"Ali Kiani", `PLATFORM_ADMIN`) in a **Default Organization**, created lazily on
+first use. Because that principal is a platform admin, it has unrestricted
+access to all workspaces and can read and write freely.
 
-**Real authenticated mode is the default.** Demo mode is opt-in and only turns
-on when `NEXT_PUBLIC_DEMO_MODE=true` is set *at build time*. If the app is
-unexpectedly showing "read-only demo" or skipping login, that flag is set to
-`true` somewhere — unset it (or set `false`) in `apps/web/.env.local` **and** in
-the Vercel project env, then rebuild/redeploy.
+- The entire auth seam is one function: `get_current_user` in
+  `apps/api/src/atip_api/auth.py`. It ignores cookies and returns the default
+  admin; every router keeps its exact signature.
+- `/api/auth/login`, `/api/auth/register`, and `/api/auth/logout` are retained
+  for API compatibility but are no-ops (they never check credentials or set a
+  cookie); `/api/auth/me` returns the default admin.
+- The org/user/session tables are kept intact, so authentication can be
+  reinstated later by restoring cookie validation in `get_current_user` and the
+  auth router, plus the deleted `login`/`signup` pages.
 
-### Demo mode (backend-free showcase)
+> **Security note:** with auth removed the deployment is fully open — anyone who
+> can reach the URL has admin access and can modify data. Deploy only behind
+> your own network controls, or re-enable authentication before exposing it
+> publicly.
 
-For a frictionless public showcase — including a **Vercel** deployment with **no
-API, database, or cookies at all**. The web app is entered directly (no
-login/signup), and the browser serves `/api/*` from bundled fixtures
-(`apps/web/src/lib/api/demo/`) with a synthetic, streamed Ask AI answer.
+### Deployment (still same-origin)
 
-- Enable with a single env var: `NEXT_PUBLIC_DEMO_MODE=true`.
-- Keep `NEXT_PUBLIC_API_URL` **empty** — nothing hits the network.
-- Deterministic (fixed fixtures) and **read-only**: create/upload/extract/review
-  actions return a clear "read-only demo" notice instead of failing.
-- `NEXT_PUBLIC_DEMO_MODE` is a build-time (`NEXT_PUBLIC_`) flag: set it in the
-  Vercel project env and redeploy for it to take effect.
-
-This is the recommended path for a Vercel demo. It exists precisely because the
-real auth model (below) is not compatible with a frontend-only Vercel deploy.
-
-### Real authenticated mode (production)
-
-The full product: real accounts, organization isolation, and server-validated
-sessions. Authentication uses an **HttpOnly, Secure, `SameSite=Strict` session
-cookie**, which requires the web app and the API to be served from the **same
-origin** so the cookie is first-party.
-
-- Recommended production architecture: a **unified single-origin reverse proxy**
-  (Caddy or Nginx) serving the web app and routing `/api/*` to the API behind
-  one public domain. See `docs/14_PRODUCTION_DEPLOYMENT.md` (docker-compose +
-  Caddy) for the reference stack.
-- `NEXT_PUBLIC_API_URL` stays **empty** even here — same-origin means the proxy
-  routes `/api/*`; a value is only ever the single public web origin.
-- `CORS_ORIGINS` (API) is set to the public origin as defense in depth; with a
-  true single origin, cross-origin CORS never fires.
-
-> **Anti-pattern — do not do this.** Deploying the frontend on Vercel and the
-> API on a *separate cross-site* origin will **not** work with the current auth:
-> a `SameSite=Strict` cookie is not sent on cross-site requests, so users cannot
-> stay signed in. For a Vercel deployment, use demo mode. For real auth, use the
-> same-origin reverse proxy. (Cross-site would require relaxing the cookie to
-> `SameSite=Lax`/`None` and aligning CORS — a deliberate backend change, not a
-> config tweak.)
+The web app calls the API same-origin (`/api/*`): in dev the Next server proxies
+it (`next.config.ts` rewrites), in production a **unified single-origin reverse
+proxy** (Caddy/Nginx) serves the web app and routes `/api/*` to the API behind
+one public domain — see `docs/14_PRODUCTION_DEPLOYMENT.md`. Keep
+`NEXT_PUBLIC_API_URL` **empty**. (An optional backend-free demo mode still
+exists behind `NEXT_PUBLIC_DEMO_MODE=true`, serving `/api/*` from bundled
+fixtures; it is off by default and unrelated to the auth change.)
 
 ## Quality and verification
 
