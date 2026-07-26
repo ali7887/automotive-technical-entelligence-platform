@@ -1,4 +1,4 @@
-==============================================================================
+====================================
  ATIP — manual run in 3 terminals (Windows / PowerShell)
  Open 3 PowerShell terminals at the repo root. Copy ONE block into each.
  Order matters: run Terminal 1 first, then 2, then 3.
