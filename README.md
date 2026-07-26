@@ -122,6 +122,12 @@ See `docs/11_DEPLOYMENT_DEV.md` for the full local deployment walkthrough.
 
 ATIP runs in one of two distinct modes. Choose per deployment; they do not mix.
 
+**Real authenticated mode is the default.** Demo mode is opt-in and only turns
+on when `NEXT_PUBLIC_DEMO_MODE=true` is set *at build time*. If the app is
+unexpectedly showing "read-only demo" or skipping login, that flag is set to
+`true` somewhere — unset it (or set `false`) in `apps/web/.env.local` **and** in
+the Vercel project env, then rebuild/redeploy.
+
 ### Demo mode (backend-free showcase)
 
 For a frictionless public showcase — including a **Vercel** deployment with **no
