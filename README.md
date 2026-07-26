@@ -118,6 +118,51 @@ pnpm dev                      # web on http://localhost:3000 (from the repo root
 
 See `docs/11_DEPLOYMENT_DEV.md` for the full local deployment walkthrough.
 
+## Deployment modes
+
+ATIP runs in one of two distinct modes. Choose per deployment; they do not mix.
+
+### Demo mode (backend-free showcase)
+
+For a frictionless public showcase — including a **Vercel** deployment with **no
+API, database, or cookies at all**. The web app is entered directly (no
+login/signup), and the browser serves `/api/*` from bundled fixtures
+(`apps/web/src/lib/api/demo/`) with a synthetic, streamed Ask AI answer.
+
+- Enable with a single env var: `NEXT_PUBLIC_DEMO_MODE=true`.
+- Keep `NEXT_PUBLIC_API_URL` **empty** — nothing hits the network.
+- Deterministic (fixed fixtures) and **read-only**: create/upload/extract/review
+  actions return a clear "read-only demo" notice instead of failing.
+- `NEXT_PUBLIC_DEMO_MODE` is a build-time (`NEXT_PUBLIC_`) flag: set it in the
+  Vercel project env and redeploy for it to take effect.
+
+This is the recommended path for a Vercel demo. It exists precisely because the
+real auth model (below) is not compatible with a frontend-only Vercel deploy.
+
+### Real authenticated mode (production)
+
+The full product: real accounts, organization isolation, and server-validated
+sessions. Authentication uses an **HttpOnly, Secure, `SameSite=Strict` session
+cookie**, which requires the web app and the API to be served from the **same
+origin** so the cookie is first-party.
+
+- Recommended production architecture: a **unified single-origin reverse proxy**
+  (Caddy or Nginx) serving the web app and routing `/api/*` to the API behind
+  one public domain. See `docs/14_PRODUCTION_DEPLOYMENT.md` (docker-compose +
+  Caddy) for the reference stack.
+- `NEXT_PUBLIC_API_URL` stays **empty** even here — same-origin means the proxy
+  routes `/api/*`; a value is only ever the single public web origin.
+- `CORS_ORIGINS` (API) is set to the public origin as defense in depth; with a
+  true single origin, cross-origin CORS never fires.
+
+> **Anti-pattern — do not do this.** Deploying the frontend on Vercel and the
+> API on a *separate cross-site* origin will **not** work with the current auth:
+> a `SameSite=Strict` cookie is not sent on cross-site requests, so users cannot
+> stay signed in. For a Vercel deployment, use demo mode. For real auth, use the
+> same-origin reverse proxy. (Cross-site would require relaxing the cookie to
+> `SameSite=Lax`/`None` and aligning CORS — a deliberate backend change, not a
+> config tweak.)
+
 ## Quality and verification
 
 The implementation includes automated backend tests (pytest, plus an end-to-end suite), frontend unit tests (vitest), static analysis, and type checking on both sides (pyright, tsc). The system also uses typed API contracts and runtime validation at boundaries such as streaming events.
