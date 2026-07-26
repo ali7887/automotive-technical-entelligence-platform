@@ -11,18 +11,24 @@ import { api } from "@/lib/api/client";
 import type { User } from "@/lib/api/types";
 import { isAuthPage, performSignOut } from "@/lib/auth-nav";
 
+// Temporary demo mode: the platform runs login-less, so the header shows no
+// identity or sign-out — only the theme toggle. Unset NEXT_PUBLIC_DEMO_MODE to
+// restore the normal user menu. See middleware.ts for the full demo-mode note.
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
 /** Current user + sign-out, shown in the header on authenticated pages. */
 export function UserMenu() {
   const pathname = usePathname();
   // Never query or render on the public auth pages: /api/auth/me 401s there,
-  // which would otherwise trip the client's redirect-to-login.
+  // which would otherwise trip the client's redirect-to-login. In demo mode
+  // there is no session identity to show, so the probe is skipped entirely.
   const onAuthPage = isAuthPage(pathname);
   const queryClient = useQueryClient();
   const [signingOut, setSigningOut] = useState(false);
 
   const { data: user } = useQuery<User>({
     queryKey: ["auth", "me"],
-    enabled: !onAuthPage,
+    enabled: !onAuthPage && !DEMO_MODE,
     retry: false,
     queryFn: async () => {
       const { data, error } = await api.GET("/api/auth/me");
@@ -31,7 +37,9 @@ export function UserMenu() {
     },
   });
 
-  if (onAuthPage || !user) return null;
+  // Demo mode keeps the theme toggle below but drops the auth block; the normal
+  // flow still hides the whole menu on auth pages or before the user loads.
+  if (!DEMO_MODE && (onAuthPage || !user)) return null;
 
   const onSignOut = async () => {
     if (signingOut) return;
@@ -63,24 +71,28 @@ export function UserMenu() {
         <Moon className="size-4 dark:hidden" />
         <Sun className="hidden size-4 dark:inline" />
       </button>
-      <span className="hidden text-sm text-muted-foreground sm:inline" title={user.email}>
-        {user.display_name}
-      </span>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onSignOut}
-        disabled={signingOut}
-        aria-label="Sign out"
-        aria-busy={signingOut}
-      >
-        {signingOut ? (
-          <Loader2 className="size-3.5 animate-spin" />
-        ) : (
-          <LogOut className="size-3.5" />
-        )}
-        Sign out
-      </Button>
+      {!DEMO_MODE && user && (
+        <>
+          <span className="hidden text-sm text-muted-foreground sm:inline" title={user.email}>
+            {user.display_name}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSignOut}
+            disabled={signingOut}
+            aria-label="Sign out"
+            aria-busy={signingOut}
+          >
+            {signingOut ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <LogOut className="size-3.5" />
+            )}
+            Sign out
+          </Button>
+        </>
+      )}
     </div>
   );
 }
