@@ -1,7 +1,13 @@
 import { z } from "zod";
 
 import { API_BASE_URL } from "./client";
+import { DEMO_ASK } from "./demo/fixtures";
 import type { AskResponse, RetrievedSource } from "./types";
+
+// Demo mode has no live API: EventSource bypasses the demo transport (it uses
+// the browser's own connection, not fetch), so opening one would hit a dead
+// origin. Instead the stream is synthesized locally from a fixture answer.
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 // SSE payloads are outside the OpenAPI-typed surface, so they are validated
 // with zod at the stream boundary (event order: sources -> token* -> final | error).
@@ -72,6 +78,10 @@ export function openChatStream(
   args: { workspaceId: string; question: string; documentId?: string },
   handlers: ChatStreamHandlers,
 ): () => void {
+  if (DEMO_MODE) {
+    return openDemoChatStream(args, handlers);
+  }
+
   // API_BASE_URL is "" for the same-origin setup; EventSource then resolves
   // against the page origin and sends the session cookie automatically
   const url = new URL(
@@ -121,6 +131,46 @@ export function openChatStream(
     } else {
       fail("Connection to the server was lost.");
     }
+  });
+
+  return close;
+}
+
+/**
+ * Demo-mode chat: replays a fixture answer through the same handler contract
+ * (sources -> token* -> final), token by token, so Ask AI looks and behaves
+ * like the live stream. Returns a close() that cancels any pending timers.
+ */
+function openDemoChatStream(
+  args: { workspaceId: string; question: string; documentId?: string },
+  handlers: ChatStreamHandlers,
+): () => void {
+  const answer: AskResponse = {
+    ...DEMO_ASK,
+    workspace_id: args.workspaceId,
+    document_id: args.documentId ?? null,
+    question: args.question,
+  };
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  let settled = false;
+  const close = () => {
+    settled = true;
+    timers.forEach(clearTimeout);
+  };
+  const at = (ms: number, fn: () => void) => {
+    timers.push(setTimeout(() => !settled && fn(), ms));
+  };
+
+  at(120, () => handlers.onSources(answer.sources));
+
+  // Stream the answer in word chunks; typical ~30ms/token cadence.
+  const tokens = answer.answer_md.match(/\S+\s*/g) ?? [answer.answer_md];
+  tokens.forEach((token, i) => at(220 + i * 28, () => handlers.onToken(token)));
+
+  at(220 + tokens.length * 28 + 120, () => {
+    if (settled) return;
+    settled = true;
+    handlers.onFinal(answer);
   });
 
   return close;

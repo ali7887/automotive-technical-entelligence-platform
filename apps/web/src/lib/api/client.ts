@@ -1,6 +1,7 @@
 import createClient from "openapi-fetch";
 
 import { shouldRedirectToLogin } from "../auth-nav";
+import { demoFetch } from "./demo/transport";
 import type { paths } from "./schema";
 
 // Same-origin by default: dev proxies /api/* through the Next server
@@ -9,12 +10,17 @@ import type { paths } from "./schema";
 // the HttpOnly session cookie will not flow.
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-export const api = createClient<paths>({ baseUrl: API_BASE_URL });
-
-// Temporary demo mode has no /login to fall back to, so a 401 must not bounce
-// there (that would loop against the demo-mode auth-page redirect). Unset
-// NEXT_PUBLIC_DEMO_MODE to restore the normal behavior. See middleware.ts.
+// Temporary demo mode. When on, the app may be deployed frontend-only (no live
+// API): the transport below answers /api/* reads from static fixtures and makes
+// writes a clean read-only error. A 401 must also not bounce to /login (there
+// is none). Unset NEXT_PUBLIC_DEMO_MODE to restore the normal behavior; the
+// demo transport is then never wired in. See demo/transport.ts and middleware.ts.
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
+export const api = createClient<paths>({
+  baseUrl: API_BASE_URL,
+  ...(DEMO_MODE ? { fetch: demoFetch } : {}),
+});
 
 // A 401 outside the public auth pages means the session is gone (expired or
 // revoked): return to login rather than surfacing raw errors. /login and
