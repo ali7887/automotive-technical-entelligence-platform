@@ -5,6 +5,7 @@ import Link from "next/link";
 import { UserMenu } from "@/components/auth/user-menu";
 import { Footer } from "@/components/footer";
 import { HealthStatus } from "@/components/health-status";
+import { GlobalSearchTrigger } from "@/components/search/global-search-trigger";
 
 import { Providers } from "./providers";
 import "./globals.css";
@@ -42,14 +43,17 @@ export default function RootLayout({
           }}
         />
         <Providers>
-          <header className="sticky top-0 z-40 border-b bg-card">
-            <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-6">
+          <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md supports-backdrop-filter:bg-background/60">
+            <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-4 px-6">
               <Link href="/" className="flex min-w-0 items-baseline gap-3">
                 <span className="font-serif text-lg font-semibold tracking-tight">ATIP</span>
-                <span className="hidden truncate text-xs text-muted-foreground md:inline">
+                <span className="hidden truncate text-xs text-muted-foreground lg:inline">
                   Automotive Technical Intelligence Platform
                 </span>
               </Link>
+              <div className="flex flex-1 justify-center">
+                <GlobalSearchTrigger />
+              </div>
               <div className="flex shrink-0 items-center gap-3">
                 <HealthStatus />
                 <UserMenu />
